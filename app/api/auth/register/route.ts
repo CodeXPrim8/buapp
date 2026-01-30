@@ -111,18 +111,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user
-    const user = await createUser({
-      phone_number,
-      first_name,
-      last_name,
-      email,
-      role,
-      pin_hash,
-    })
+    let user
+    try {
+      user = await createUser({
+        phone_number,
+        first_name,
+        last_name,
+        email,
+        role,
+        pin_hash,
+      })
+    } catch (createError: any) {
+      console.error('Failed to create user:', createError)
+      console.error('Role attempted:', role)
+      console.error('Error details:', createError.message)
+      
+      // Check if it's a constraint violation for role
+      if (createError.message?.includes('role') || createError.message?.includes('constraint')) {
+        return errorResponse(
+          `Failed to create user: ${createError.message}. Please ensure the database allows the "${role}" role. Run the SQL script: database/add-both-role.sql`,
+          500
+        )
+      }
+      
+      // Return the actual error message
+      return errorResponse(
+        `Failed to create user: ${createError.message || 'Unknown database error'}`,
+        500
+      )
+    }
 
     if (!user) {
       console.error('Failed to create user. Role:', role)
-      return errorResponse('Failed to create user. Please ensure the database allows the "both" role. Run the SQL script: database/add-both-role.sql', 500)
+      return errorResponse('Failed to create user: User creation returned null', 500)
     }
 
     // Create wallet for user

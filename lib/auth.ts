@@ -126,10 +126,18 @@ export async function createUser(userData: {
 
   if (error) {
     console.error('Error creating user:', error)
-    return null
+    console.error('Error code:', error.code)
+    console.error('Error message:', error.message)
+    console.error('Error details:', error.details)
+    console.error('Error hint:', error.hint)
+    // Throw error with details so it can be caught and returned properly
+    throw new Error(`Database error: ${error.message}${error.details ? ` - ${error.details}` : ''}${error.hint ? ` (${error.hint})` : ''}`)
   }
   
-  if (!data) return null
+  if (!data) {
+    console.error('createUser: No data returned from insert')
+    throw new Error('Failed to create user: No data returned from database')
+  }
   return data as User
 }
 

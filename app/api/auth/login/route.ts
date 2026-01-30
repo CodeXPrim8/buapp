@@ -47,7 +47,13 @@ export async function POST(request: NextRequest) {
     const { phone_number, pin } = body
 
     // Get user
-    const user = await getUserByPhone(phone_number)
+    let user
+    try {
+      user = await getUserByPhone(phone_number)
+    } catch (error: any) {
+      console.error('Error fetching user during login:', error)
+      return errorResponse('Database error during login. Please try again.', 500)
+    }
 
     if (!user) {
       // Don't reveal if user exists or not (security best practice)
@@ -55,7 +61,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify PIN
-    const isValidPin = await verifyPin(pin, user.pin_hash)
+    let isValidPin
+    try {
+      isValidPin = await verifyPin(pin, user.pin_hash)
+    } catch (error: any) {
+      console.error('Error verifying PIN:', error)
+      return errorResponse('Error verifying credentials. Please try again.', 500)
+    }
 
     if (!isValidPin) {
       return errorResponse('Invalid phone number or PIN', 401)
