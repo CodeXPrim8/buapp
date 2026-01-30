@@ -1,0 +1,10 @@
+ok now lets work on the security espect.
+you know we have three users, Quest,Celebtant, Vendor.
+
+1.i want a users can register as  Quest,Celebtan or  Vendor.
+2. Users must register as quest to have access to guest page 
+3. Users must register as Celebrant to have access to celebrant page
+4. Users must register as vendor to have access to vendor page
+5. Users can creat Pin 
+6. Pin will be used to initiate transfer of BU from one wallet to another
+7. Notification must be functional, when a transfer is made the reciever must recieve notification as soon as the BU arrives the wallet

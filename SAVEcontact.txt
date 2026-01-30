@@ -1,0 +1,66 @@
+Replace the current public user directory with a permission-based contact model. Users only see contacts they've explicitly added via friend requests or manual saves. Phone numbers remain the unique identifier for transactions and connections.
+Core Requirements
+1. Contact Visibility Rules
+Users ONLY see their accepted contacts in search/autocomplete
+No global user directory accessible to anyone
+Manual phone number entry required to transact with non-contacts
+Optional: Add to contacts after successful transaction
+2. Connection Methods
+Direct Transaction: Enter any registered phone number → send money → optional friend request
+Outgoing Friend Request: Enter phone number → send request → wait for acceptance
+Incoming Friend Request: Receive request → accept/decline/block
+
+Screen: SendMoney
+- Search bar: placeholder="Search your contacts..." 
+  - Query: users/{currentUser}/contacts collection only
+  - No results: show "No contacts found"
+  
+- Divider: "— or enter phone number —"
+  
+- Phone input: [Country Code] [Number]
+  - Validate format
+  - Check if registered via cloud function
+  - If registered: show limited profile (name, photo only)
+  - If not registered: "Invite to BU" option
+  
+- Post-transaction: Show "Add to Contacts" button
+  - On tap: create outgoing friend request
+
+Screen: ContactsList
+- Segmented control: [Contacts] [Requests (badge)]
+- Contacts tab:
+  - Search: filters local contacts only
+  - List: alphabetical, show last transaction
+  - Empty state: "No contacts yet. Add someone to get started"
+  
+- Requests tab:
+  - Incoming: accept/decline/block actions
+  - Outgoing: cancel option, pending status
+  
+- FAB [+]: "Add Contact"
+  - Options: Enter phone / Import from device / Scan QR
+
+
+Screen: AddContact
+- Phone input with validation
+- Optional personal message (max 140 chars)
+- Submit: create outgoing request
+- Prevent duplicate requests to same number
+- Rate limit: max 5 requests/day to unconnected numbers
+
+
+
+Notifications
+Incoming request: Push + in-app badge
+Request accepted: Push notification "John accepted your request"
+Request expiring: 24hr before auto-delete, optional reminder
+
+
+[ ] Search only returns user's accepted contacts
+[ ] Can send money to any registered phone number via manual entry
+[ ] Friend requests require mutual acceptance for visibility
+[ ] Blocked users cannot transact or send requests
+[ ] No API exposes full user list to any client
+[ ] Rate limiting prevents request spam
+[ ] All existing transactions remain accessible
+[ ] Migration preserves user data
