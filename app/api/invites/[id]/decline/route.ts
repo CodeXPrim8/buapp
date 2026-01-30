@@ -5,15 +5,15 @@ import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 // Decline an invite
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authUser = getAuthUser(request)
+    const authUser = await getAuthUser(request)
     if (!authUser) {
       return errorResponse('Authentication required', 401)
     }
 
-    const inviteId = params.id
+    const { id: inviteId } = await params
 
     // Get invite and verify it belongs to the user
     const { data: invite, error: inviteError } = await supabase

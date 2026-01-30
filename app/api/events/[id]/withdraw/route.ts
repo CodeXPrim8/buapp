@@ -5,7 +5,7 @@ import { successResponse, errorResponse } from '@/lib/api-helpers'
 // Withdraw BU from event to main wallet
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const celebrantId = request.headers.get('x-user-id')
@@ -19,11 +19,13 @@ export async function POST(
       return errorResponse('Only celebrants can withdraw from events', 403)
     }
 
+    const { id: eventId } = await params
+
     // Get event
     const { data: event, error: eventError } = await supabase
       .from('events')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', eventId)
       .eq('celebrant_id', celebrantId)
       .single()
 
@@ -39,7 +41,7 @@ export async function POST(
     const { data: transfers } = await supabase
       .from('transfers')
       .select('amount')
-      .eq('event_id', params.id)
+      .eq('event_id', eventId)
       .eq('status', 'completed')
 
     const totalBU = transfers?.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0) || 0
@@ -77,7 +79,7 @@ export async function POST(
     const { error: markError } = await supabase
       .from('events')
       .update({ withdrawn: true })
-      .eq('id', params.id)
+      .eq('id', eventId)
 
     if (markError) {
       console.error('Failed to mark event as withdrawn:', markError)

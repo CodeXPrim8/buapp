@@ -4,7 +4,7 @@ import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authUser = await getAuthUser(request)
@@ -12,7 +12,7 @@ export async function GET(
       return errorResponse('Unauthorized', 401)
     }
 
-    const { id } = params
+    const { id } = await params
 
     const { data: gateway, error } = await supabase
       .from('gateways')

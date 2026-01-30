@@ -5,7 +5,7 @@ import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 // Confirm pending sale
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authUser = await getAuthUser(request)
@@ -43,7 +43,7 @@ export async function POST(
       dbUserId = dbUser.id
     }
 
-    const { id } = params
+    const { id } = await params
 
     // Update sale status to confirmed
     const { data: sale, error } = await supabase
