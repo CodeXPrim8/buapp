@@ -6,12 +6,23 @@ import { validateJWTSecret } from './security'
 let jwtSecretValidated = false
 function ensureJWTSecretValidated() {
   if (!jwtSecretValidated && typeof window === 'undefined') {
+    // Skip validation during build time (Next.js build phase)
+    const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 
+                        process.env.NEXT_PHASE === 'phase-development' ||
+                        process.env.VERCEL === '1' ||
+                        !process.env.JWT_SECRET // If not set, likely build time
+    
+    if (isBuildTime) {
+      jwtSecretValidated = true // Skip validation during build
+      return
+    }
+    
     try {
       validateJWTSecret()
       jwtSecretValidated = true
     } catch (error: any) {
       // Only throw in production runtime, not during build
-      if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PHASE && process.env.VERCEL !== '1') {
+      if (process.env.NODE_ENV === 'production') {
         throw error
       }
       console.warn('⚠️  JWT_SECRET validation warning:', error.message)
