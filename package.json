@@ -6,7 +6,12 @@
     "build": "next build",
     "dev": "next dev -H 0.0.0.0",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "verify-env": "node scripts/verify-env.js",
+    "generate-secret": "node scripts/generate-jwt-secret.js",
+    "pre-deploy": "node scripts/pre-deployment-check.js",
+    "vercel-setup": "node scripts/vercel-setup-helper.js",
+    "verify-deployment": "node scripts/verify-deployment.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
