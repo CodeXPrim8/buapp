@@ -222,14 +222,18 @@ export default function VendorDashboard({ onNavigate }: VendorDashboardProps) {
             <h3 className="font-semibold mb-3">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={() => onNavigate?.('vendor-create-event')}
+                onClick={() => {
+                  onNavigate?.('vendor-create-event')
+                }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <Ticket className="h-4 w-4 mr-2" />
                 Create Event
               </Button>
               <Button
-                onClick={() => onNavigate?.('vendor-gateway-setup')}
+                onClick={() => {
+                  onNavigate?.('vendor-gateway-setup')
+                }}
                 variant="outline"
               >
                 Setup Gateway

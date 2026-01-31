@@ -35,8 +35,8 @@ export async function getAdminUser(request: NextRequest): Promise<{ userId: stri
       return null
     }
     
-    // Check if user is admin (role should be 'admin' or 'super_admin')
-    if (payload.role !== 'admin' && payload.role !== 'super_admin') {
+    // Check if user is admin (support both 'superadmin' and 'super_admin' for backward compatibility)
+    if (payload.role !== 'admin' && payload.role !== 'superadmin' && payload.role !== 'super_admin') {
       return null
     }
     

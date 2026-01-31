@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody } from '@/lib/api-helpers'
 import { verifyPin } from '@/lib/auth'
+import { withCSRFProtection } from '@/lib/api-middleware'
 
 // Create withdrawal request
-export async function POST(request: NextRequest) {
+export const POST = withCSRFProtection(async function POST(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id')
     
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       bu_amount: (val) => typeof val === 'number' && val > 0,
       naira_amount: (val) => typeof val === 'number' && val > 0,
       type: (val) => ['bank', 'wallet'].includes(val),
-      pin: (val) => typeof val === 'string' && val.length === 4,
+      pin: (val) => typeof val === 'string' && val.length === 6 && /^\d+$/.test(val),
     })
 
     if (!validation.valid) {
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
     console.error('Create withdrawal error:', error)
     return errorResponse('Internal server error', 500)
   }
-}
+})
 
 // Get withdrawal history
 export async function GET(request: NextRequest) {

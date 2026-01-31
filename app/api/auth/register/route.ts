@@ -61,10 +61,6 @@ export async function POST(request: NextRequest) {
 
     let existingUser, checkError
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/register/route.ts:64',message:'Before Supabase query',data:{phoneNumber:phone_number?.substring(0,5)+'***'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion agent log
-      
       const result = await supabase
         .from('users')
         .select('id')
@@ -72,15 +68,7 @@ export async function POST(request: NextRequest) {
         .single()
       existingUser = result.data
       checkError = result.error
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/register/route.ts:72',message:'After Supabase query',data:{hasData:!!existingUser,hasError:!!checkError,errorCode:checkError?.code,errorMessage:checkError?.message,errorDetails:checkError?.details,errorHint:checkError?.hint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion agent log
     } catch (fetchError: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/register/route.ts:75',message:'Supabase fetch exception',data:{errorMessage:fetchError?.message,errorStack:fetchError?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion agent log
-      
       console.error('Fetch error connecting to Supabase:', fetchError)
       return errorResponse(
         'Cannot connect to database. Please check if Supabase project is active and URL is correct. Error: ' + fetchError.message,
@@ -89,10 +77,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/register/route.ts:87',message:'Supabase error detected',data:{errorCode:checkError?.code,errorMessage:checkError?.message,errorDetails:checkError?.details,errorHint:checkError?.hint,fullError:JSON.stringify(checkError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion agent log
-      
       console.error('Error checking existing user:', checkError)
       return errorResponse('Database error: ' + checkError.message, 500)
     }

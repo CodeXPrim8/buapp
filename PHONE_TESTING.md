@@ -2,7 +2,7 @@
 
 ## ✅ Setup Complete!
 
-Your local IP address is: **192.168.2.100**
+Your local IP address is: **192.168.2.101**
 
 ## 🚀 Steps to Test on Phone
 
@@ -22,11 +22,11 @@ npm run dev
 
 **Open your phone's browser and go to:**
 ```
-http://192.168.2.100:3000
+http://192.168.2.101:3000
 ```
 
 **Or scan this QR code with your phone:**
-- Generate QR code with: `http://192.168.2.100:3000`
+- Generate QR code with: `http://192.168.2.101:3000`
 - Scan with your phone's camera
 - Tap the notification to open in browser
 
@@ -46,7 +46,7 @@ http://192.168.2.100:3000
 2. **Verify IP address:**
    - Run: `ipconfig` in terminal
    - Look for IPv4 Address under your active network adapter
-   - Make sure it matches 192.168.2.100
+   - Make sure it matches 192.168.2.101
 
 3. **Check network:**
    - Both devices must be on same Wi-Fi
@@ -72,7 +72,7 @@ http://192.168.2.100:3000
 
 **Your app URL:**
 ```
-http://192.168.2.100:3000
+http://192.168.2.101:3000
 ```
 
 **Bookmark this on your phone for easy access!**

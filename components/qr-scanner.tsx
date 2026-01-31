@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, XCircle, AlertCircle, Ticket } from 'lucide-react'
-import { invitesApi, transferApi } from '@/lib/api-client'
+import { invitesApi, transferApi, userApi } from '@/lib/api-client'
 
 interface TransferValidation {
   id: string
@@ -48,18 +48,19 @@ export default function QRScanner({ mode: userMode = 'user' }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    // Check if user is vendor
-    if (typeof window !== 'undefined') {
-      const currentUser = localStorage.getItem('currentUser')
-      if (currentUser) {
-        try {
-          const user = JSON.parse(currentUser)
-          setIsVendor(user.role === 'vendor' || user.role === 'both')
-        } catch (e) {
-          console.error('Failed to parse user data:', e)
+    // Check if user is vendor via API
+    const checkVendorStatus = async () => {
+      try {
+        const userResponse = await userApi.getMe()
+        if (userResponse.success && userResponse.data?.user) {
+          const role = userResponse.data.user.role
+          setIsVendor(role === 'vendor' || role === 'both')
         }
+      } catch (e) {
+        console.error('Failed to check vendor status:', e)
       }
     }
+    checkVendorStatus()
   }, [])
 
   const startCamera = () => {

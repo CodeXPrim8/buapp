@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserByPhone, verifyPin } from '@/lib/auth'
 import { successResponse, errorResponse, validateBody } from '@/lib/api-helpers'
-import { generateToken } from '@/lib/jwt'
+import { generateToken, generateRefreshToken } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/cookies'
 import { rateLimiters } from '@/lib/rate-limit'
+import { checkAccountLockout, recordFailedAttempt, clearFailedAttempts } from '@/lib/account-lockout'
+import { logLoginAttempt, getClientIP, getUserAgent } from '@/lib/audit-log'
+import { setCSRFToken } from '@/lib/csrf'
+import crypto from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,6 +49,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { phone_number, pin } = body
+    const ipAddress = getClientIP(request)
+    const userAgent = getUserAgent(request)
 
     // Get user
     let user
@@ -64,7 +70,18 @@ export async function POST(request: NextRequest) {
     if (!user) {
       // Don't reveal if user exists or not (security best practice)
       console.log('[LOGIN] User not found for phone:', phone_number?.substring(0, 5) + '***')
+      
+      // Log failed login attempt
+      await logLoginAttempt(null, null, false, ipAddress, userAgent, 'User not found')
+      
       return errorResponse('Invalid phone number or PIN', 401)
+    }
+    
+    // Check account lockout BEFORE PIN verification
+    const lockoutStatus = checkAccountLockout(user.id)
+    if (lockoutStatus.isLocked) {
+      await logLoginAttempt(user.id, user.role, false, ipAddress, userAgent, 'Account locked')
+      return errorResponse(lockoutStatus.message || 'Account is temporarily locked', 423) // 423 Locked
     }
     
     console.log('[LOGIN] User found, role:', user.role)
@@ -79,15 +96,36 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isValidPin) {
-      return errorResponse('Invalid phone number or PIN', 401)
+      // Record failed attempt and check for lockout
+      const lockoutStatus = await recordFailedAttempt(user.id, ipAddress)
+      
+      // Log failed login attempt
+      await logLoginAttempt(user.id, user.role, false, ipAddress, userAgent, 'Invalid PIN')
+      
+      if (lockoutStatus.isLocked) {
+        return errorResponse(lockoutStatus.message || 'Account locked due to multiple failed attempts', 423)
+      }
+      
+      return errorResponse(
+        `Invalid phone number or PIN. ${lockoutStatus.attemptsRemaining} attempts remaining.`,
+        401
+      )
     }
+    
+    // Successful PIN verification - clear failed attempts
+    clearFailedAttempts(user.id)
 
-    // Generate JWT token
-    const token = generateToken({
+    // Generate JWT tokens (access + refresh)
+    // Generate refresh token ID
+    const refreshTokenId = crypto.randomUUID()
+    
+    const accessToken = generateToken({
       userId: user.id,
       role: user.role,
       phoneNumber: user.phone_number,
     })
+    
+    const refreshToken = generateRefreshToken(user.id, refreshTokenId)
     
     console.log('[LOGIN] Token generated successfully for role:', user.role)
 
@@ -100,15 +138,31 @@ export async function POST(request: NextRequest) {
     })
     
     console.log('[LOGIN] Login successful for user:', { id: user.id, role: user.role })
+    
+    // Log successful login
+    await logLoginAttempt(user.id, user.role, true, ipAddress, userAgent)
 
-    // Set httpOnly cookie on response
-    response.cookies.set('bu-auth-token', token, {
+    // Set httpOnly cookies on response
+    // Access token (short-lived: 1 hour)
+    response.cookies.set('bu-auth-token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60, // 1 hour (reduced from 7 days)
+      path: '/',
+    })
+    
+    // Refresh token (long-lived: 7 days)
+    response.cookies.set('bu-refresh-token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     })
+    
+    // Set CSRF token
+    setCSRFToken(response)
 
     // Add rate limit headers
     response.headers.set('X-RateLimit-Limit', '5')

@@ -7,7 +7,7 @@ import { User, Store, PartyPopper, Lock } from 'lucide-react'
 interface ModeSwitcherProps {
   currentMode: 'user' | 'celebrant' | 'vendor'
   onModeChange: (mode: 'user' | 'celebrant' | 'vendor') => void
-  userRole?: 'user' | 'celebrant' | 'vendor'
+  userRole?: 'user' | 'celebrant' | 'vendor' | 'both' | 'admin' | 'superadmin'
 }
 
 export default function ModeSwitcher({
@@ -15,7 +15,7 @@ export default function ModeSwitcher({
   onModeChange,
   userRole,
 }: ModeSwitcherProps) {
-  const isVendor = userRole === 'vendor' || userRole === 'both'
+  const isVendor = userRole === 'vendor' || userRole === 'both' || userRole === 'admin' || userRole === 'superadmin'
 
   const handleVendorClick = () => {
     if (!isVendor) {

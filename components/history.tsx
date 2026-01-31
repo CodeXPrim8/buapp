@@ -50,16 +50,37 @@ export default function History() {
     ? transactions
     : transactions.filter((tx) => tx.type === filter)
 
-  const getTransactionIcon = (type: string) => {
-    return type === 'topup' || type === 'refund' || type === 'bu_transfer' || type === 'purchase'
-      ? <ArrowDown className="h-4 w-4 text-primary" />
-      : <ArrowUp className="h-4 w-4 text-destructive" />
+  // Determine if transaction is a credit (money coming in) or debit (money going out)
+  const isCredit = (tx: Transaction) => {
+    // Top-ups are always credits
+    if (tx.type === 'topup') return true
+    
+    // Withdrawals are always debits
+    if (tx.type === 'withdrawal') return false
+    
+    // Purchases are always debits (money going out)
+    if (tx.type === 'purchase') return false
+    
+    // For transfers, check the description
+    // "Received from" = credit, "Sent to" = debit
+    if (tx.type === 'bu_transfer') {
+      return tx.description.toLowerCase().includes('received from')
+    }
+    
+    // Default: check description
+    return tx.description.toLowerCase().includes('received')
   }
 
-  const getTransactionColor = (type: string) => {
-    return type === 'topup' || type === 'refund' || type === 'bu_transfer' || type === 'purchase'
-      ? 'bg-primary/20'
-      : 'bg-destructive/20'
+  const getTransactionIcon = (tx: Transaction) => {
+    return isCredit(tx)
+      ? <ArrowDown className="h-4 w-4 text-green-400" />
+      : <ArrowUp className="h-4 w-4 text-red-400" />
+  }
+
+  const getTransactionColor = (tx: Transaction) => {
+    return isCredit(tx)
+      ? 'bg-green-400/20'
+      : 'bg-red-400/20'
   }
 
   return (
@@ -106,8 +127,8 @@ export default function History() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`rounded-full p-2 ${getTransactionColor(tx.type)}`}>
-                      {getTransactionIcon(tx.type)}
+                    <div className={`rounded-full p-2 ${getTransactionColor(tx)}`}>
+                      {getTransactionIcon(tx)}
                     </div>
                     <div>
                       <p className="font-medium">{tx.description}</p>
@@ -127,12 +148,12 @@ export default function History() {
                   </div>
                   <span
                     className={`font-semibold ${
-                      tx.type === 'topup' || tx.type === 'purchase' || tx.type === 'bu_transfer'
-                        ? 'text-primary'
-                        : 'text-foreground'
+                      isCredit(tx)
+                        ? 'text-green-400'
+                        : 'text-red-400'
                     }`}
                   >
-                    {tx.type === 'topup' || tx.type === 'purchase' || tx.type === 'bu_transfer' ? '+' : '-'}₦
+                    {isCredit(tx) ? '+' : '-'}₦
                     {tx.amount.toLocaleString()}
                   </span>
                 </div>

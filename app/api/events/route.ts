@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody, getAuthUser } from '@/lib/api-helpers'
+import { withCSRFProtection } from '@/lib/api-middleware'
+import { sanitizeText, sanitizeName } from '@/lib/sanitize'
 
 // Create event (celebrant only)
-export async function POST(request: NextRequest) {
+export const POST = withCSRFProtection(async function POST(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
     if (!authUser) {
@@ -64,12 +66,21 @@ export async function POST(request: NextRequest) {
       tickets_enabled
     } = body
 
+    // Sanitize user inputs
+    const sanitizedName = sanitizeName(name || '')
+    const sanitizedLocation = location ? sanitizeText(location) : null
+    const sanitizedCity = city ? sanitizeName(city) : undefined
+    const sanitizedState = state ? sanitizeName(state) : undefined
+    const sanitizedCountry = country ? sanitizeName(country) : undefined
+    const sanitizedCategory = category ? sanitizeText(category) : undefined
+    const sanitizedDescription = description ? sanitizeText(description) : undefined
+
     const eventData: any = {
       celebrant_id: dbCelebrantId, // Use database user ID for consistency
       gateway_id: gateway_id || null,
-      name,
+      name: sanitizedName,
       date,
-      location: location || null,
+      location: sanitizedLocation,
       total_bu_received: 0,
       withdrawn: false,
     }
@@ -89,11 +100,11 @@ export async function POST(request: NextRequest) {
     if (max_tickets !== undefined && max_tickets !== null) {
       eventData.max_tickets = parseInt(max_tickets.toString())
     }
-    if (city !== undefined) eventData.city = city
-    if (state !== undefined) eventData.state = state
-    if (country !== undefined) eventData.country = country
-    if (category !== undefined) eventData.category = category
-    if (description !== undefined) eventData.description = description
+    if (sanitizedCity !== undefined) eventData.city = sanitizedCity
+    if (sanitizedState !== undefined) eventData.state = sanitizedState
+    if (sanitizedCountry !== undefined) eventData.country = sanitizedCountry
+    if (sanitizedCategory !== undefined) eventData.category = sanitizedCategory
+    if (sanitizedDescription !== undefined) eventData.description = sanitizedDescription
     if (image_url !== undefined) eventData.image_url = image_url
     if (is_public !== undefined) eventData.is_public = Boolean(is_public)
     if (tickets_enabled !== undefined) eventData.tickets_enabled = Boolean(tickets_enabled)
@@ -130,7 +141,7 @@ export async function POST(request: NextRequest) {
       )
     }
   }
-}
+})
 
 // List events (celebrant's own events)
 export async function GET(request: NextRequest) {

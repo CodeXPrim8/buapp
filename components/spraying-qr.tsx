@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { QrCode, CheckCircle, Calendar, MapPin, User, AlertCircle } from 'lucide-react'
 import PinVerification from '@/components/pin-verification'
 import { createNotification } from '@/components/notifications'
-import { transferApi } from '@/lib/api-client'
+import { transferApi, userApi } from '@/lib/api-client'
 
 interface EventDetails {
   eventId: string
@@ -170,7 +170,13 @@ export default function SprayingQR() {
     }
 
     try {
-      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
+      // Get current user from API
+      const userResponse = await userApi.getMe()
+      if (!userResponse.success || !userResponse.data?.user) {
+        alert('Authentication required. Please login again.')
+        return
+      }
+      const currentUser = userResponse.data.user
       
       // Call API to send BU via gateway QR
       const response = await transferApi.sendViaGatewayQR({

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validation = validateBody(body, {
       phone_number: (val) => typeof val === 'string' && val.length > 0,
-      pin: (val) => typeof val === 'string' && (val.length === 4 || val.length === 6),
+      pin: (val) => typeof val === 'string' && val.length === 6 && /^\d+$/.test(val),
     })
 
     if (!validation.valid) {
@@ -71,9 +71,9 @@ export async function POST(request: NextRequest) {
       return errorResponse('Invalid credentials', 401)
     }
 
-    // Check if user is admin
-    if (user.role !== 'admin' && user.role !== 'super_admin') {
-      console.log('User role check failed:', { user_role: user.role, required: ['admin', 'super_admin'] })
+    // Check if user is admin (support both 'superadmin' and 'super_admin' for backward compatibility)
+    if (user.role !== 'admin' && user.role !== 'superadmin' && user.role !== 'super_admin') {
+      console.log('User role check failed:', { user_role: user.role, required: ['admin', 'superadmin', 'super_admin'] })
       return errorResponse('Access denied. Admin privileges required.', 403)
     }
 

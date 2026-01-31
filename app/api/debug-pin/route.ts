@@ -1,18 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { verifyPin, hashPin } from '@/lib/auth'
-import { successResponse, errorResponse } from '@/lib/api-helpers'
+import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 
-// Debug endpoint to test PIN verification
+// Debug endpoint to test PIN verification - ADMIN ONLY
+// Disabled in production by default
 export async function POST(request: NextRequest) {
-  try {
-    const userId = request.headers.get('x-user-id')
-    const body = await request.json()
-    const { pin, testPin } = body
+  // Disable in production unless explicitly enabled
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
+    return errorResponse('Debug endpoints are disabled in production', 404)
+  }
 
-    if (!userId) {
-      return errorResponse('User ID required', 401)
+  try {
+    // Require admin authentication
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return errorResponse('Authentication required', 401)
     }
+
+    // Check if user is admin or superadmin
+    if (authUser.role !== 'admin' && authUser.role !== 'superadmin' && authUser.role !== 'super_admin') {
+      return errorResponse('Admin access required', 403)
+    }
+
+    const body = await request.json()
+    const { pin, testPin, userId: targetUserId } = body
+
+    // Use authenticated user's ID or provided target user ID (admin can test other users)
+    const userId = targetUserId || authUser.userId
 
     // Get user's PIN hash
     const { data: user, error: userError } = await supabase

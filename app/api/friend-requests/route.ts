@@ -25,12 +25,9 @@ export async function POST(request: NextRequest) {
     const { phone_number, message } = body
 
     console.log('Friend request - Original phone:', phone_number)
-    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'friend-requests/route.ts:27',message:'Friend request received',data:{phoneNumber:phone_number},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
 
     // getUserByPhone now handles all format conversions internally
     const receiver = await getUserByPhone(phone_number)
-    
-    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'friend-requests/route.ts:31',message:'User lookup result',data:{found:!!receiver,receiverPhone:receiver?.phone_number},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
 
     if (!receiver) {
       console.error('User lookup failed for phone:', phone_number)

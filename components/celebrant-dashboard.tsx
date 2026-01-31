@@ -192,7 +192,12 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
           </Button>
         </div>
         <Button
-          onClick={() => onNavigate?.('celebrant-create-event')}
+          onClick={() => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/celebrant-dashboard.tsx:195',message:'Create Event button clicked',data:{hasOnNavigate:!!onNavigate},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion agent log
+            onNavigate?.('celebrant-create-event')
+          }}
           className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4 mr-2" />

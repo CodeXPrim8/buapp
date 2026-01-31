@@ -130,28 +130,23 @@ export default function Home() {
   const canAccessPage = (page: string) => {
     if (page === 'dashboard' || page === 'profile' || page === 'notifications') return true
     
-    // Vendor pages are restricted to vendor or both role only
-    if (page.startsWith('vendor-')) {
-      return (currentUser?.role === 'vendor' || currentUser?.role === 'both') && mode === 'vendor'
-    }
-    
-    // Guest and Celebrant modes are accessible to 'user', 'celebrant', and 'both' registered roles
+    // Guest and Celebrant modes are accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' registered roles
     if (mode === 'user') {
-      // Guest mode accessible to 'user', 'celebrant', and 'both' roles
-      if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both') {
+      // Guest mode accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' roles
+      if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
         return ['wallet', 'spraying', 'redemption', 'buy-bu', 'history', 'invites', 'events', 'event-info', 'send-bu', 'receive-bu', 'contacts', 'paystack-payment'].includes(page)
       }
       return false
     } else if (mode === 'celebrant') {
-      // Celebrant mode accessible to 'user', 'celebrant', and 'both' roles
-      if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both') {
+      // Celebrant mode accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' roles
+      if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
         return ['wallet', 'redemption', 'history', 'celebrant-event-info', 'celebrant-create-event', 'celebrant-send-invites'].includes(page)
       }
       return false
     } else if (mode === 'vendor') {
-      // Vendor mode accessible if registered as vendor or both
-      if (currentUser?.role === 'vendor' || currentUser?.role === 'both') {
-        return ['wallet', 'spraying', 'vendor-gateway-setup', 'vendor-buyback'].includes(page)
+      // Vendor mode accessible if registered as vendor, both, admin, or superadmin
+      if (currentUser?.role === 'vendor' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
+        return ['wallet', 'spraying', 'vendor-gateway-setup', 'vendor-buyback', 'vendor-create-event'].includes(page)
       }
       return false
     }
@@ -162,15 +157,12 @@ export default function Home() {
   // This hook MUST be called before any early returns
   useEffect(() => {
     if (mounted && isAuthenticated && currentUser) {
-      // If trying to access vendor mode but not registered as vendor or both, switch to user mode
-      if (mode === 'vendor' && currentUser.role !== 'vendor' && currentUser.role !== 'both') {
+      // If trying to access vendor mode but not registered as vendor, both, admin, or superadmin, switch to user mode
+      if (mode === 'vendor' && currentUser.role !== 'vendor' && currentUser.role !== 'both' && currentUser.role !== 'admin' && currentUser.role !== 'superadmin') {
         setMode('user')
         setCurrentPage('dashboard')
       } else if (!canAccessPage(currentPage)) {
-        fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:143',message:'Page access denied, redirecting to dashboard',data:{currentPage,canAccess:canAccessPage(currentPage),mode,userRole:currentUser.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
         setCurrentPage('dashboard')
-      } else {
-        fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'page.tsx:147',message:'Page access granted',data:{currentPage,canAccess:canAccessPage(currentPage),mode,userRole:currentUser.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       }
     }
   }, [currentPage, mounted, isAuthenticated, mode, currentUser])
@@ -229,7 +221,7 @@ export default function Home() {
                 eventBalance={pageData?.eventBalance}
                 eventWithdrawn={pageData?.eventWithdrawn}
               />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} />}
+              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
               {currentPage === 'notifications' && <Notifications onNavigate={handleNavigate} />}
               {currentPage === 'buy-bu' && <BuyBU />}
               {currentPage === 'history' && <History />}
@@ -266,7 +258,7 @@ export default function Home() {
               {currentPage === 'celebrant-event-info' && <CelebrantEventInfo eventId={pageData} onNavigate={handleNavigate} />}
               {currentPage === 'celebrant-create-event' && <CelebrantCreateEvent onNavigate={handleNavigate} />}
               {currentPage === 'celebrant-send-invites' && <CelebrantSendInvites eventId={pageData} onNavigate={handleNavigate} />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} />}
+              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
             </>
           ) : (
             <>
@@ -277,7 +269,7 @@ export default function Home() {
               {currentPage === 'vendor-gateway-setup' && <VendorGatewaySetup onNavigate={handleNavigate} />}
               {currentPage === 'vendor-buyback' && <VendorBuyback onNavigate={handleNavigate} />}
               {currentPage === 'vendor-create-event' && <VendorCreateEvent onNavigate={handleNavigate} />}
-              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} />}
+              {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
             </>
           )}
         </div>

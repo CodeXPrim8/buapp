@@ -1,70 +1,59 @@
-# PowerShell script to push code to GitHub
-# Run this script in PowerShell from your project directory
+# Push to GitHub Script
+Write-Host "=== Pushing to GitHub ===" -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "🚀 Pushing code to GitHub..." -ForegroundColor Cyan
+# Remove lock file if it exists
+Write-Host "1. Checking for git lock file..." -ForegroundColor Yellow
+if (Test-Path ".git\index.lock") {
+    Remove-Item -Path ".git\index.lock" -Force
+    Write-Host "   ✓ Removed lock file" -ForegroundColor Green
+} else {
+    Write-Host "   ✓ No lock file found" -ForegroundColor Green
+}
 
-# Check if git is installed
-try {
-    $gitVersion = git --version
-    Write-Host "✅ Git found: $gitVersion" -ForegroundColor Green
-} catch {
-    Write-Host "❌ Git is not installed or not in PATH" -ForegroundColor Red
-    Write-Host "Please install Git from: https://git-scm.com/download/win" -ForegroundColor Yellow
-    Write-Host "After installing, restart PowerShell and run this script again." -ForegroundColor Yellow
+Write-Host ""
+
+# Stage all changes
+Write-Host "2. Staging all changes..." -ForegroundColor Yellow
+git add -A
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   ✓ Changes staged" -ForegroundColor Green
+} else {
+    Write-Host "   ✗ Failed to stage changes" -ForegroundColor Red
     exit 1
 }
 
-# Navigate to project directory
-$projectPath = "C:\Users\clemx\Downloads\Bison note mobile-app-build"
-Set-Location $projectPath
+Write-Host ""
 
-Write-Host "`n📁 Current directory: $(Get-Location)" -ForegroundColor Cyan
+# Check status
+Write-Host "3. Checking status..." -ForegroundColor Yellow
+git status --short
 
-# Initialize git repository (if not already initialized)
-if (-not (Test-Path ".git")) {
-    Write-Host "`n🔧 Initializing git repository..." -ForegroundColor Yellow
-    git init
+Write-Host ""
+
+# Commit changes
+Write-Host "4. Committing changes..." -ForegroundColor Yellow
+$commitMessage = "Fix navigation, history colors, and topup transactions`n`n- Fix vendor mode navigation (Create Event, Setup Gateway)`n- Fix history page: debits red, credits green`n- Fix topup transactions showing as debits`n- Add security improvements and phone testing docs"
+git commit -m $commitMessage
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   ✓ Changes committed" -ForegroundColor Green
 } else {
-    Write-Host "`n✅ Git repository already initialized" -ForegroundColor Green
+    Write-Host "   ✗ Failed to commit changes" -ForegroundColor Red
+    exit 1
 }
 
-# Add README.md
-Write-Host "`n📝 Adding README.md..." -ForegroundColor Yellow
-git add README.md
-
-# Create first commit
-Write-Host "`n💾 Creating first commit..." -ForegroundColor Yellow
-git commit -m "first commit"
-
-# Set branch to main
-Write-Host "`n🌿 Setting branch to main..." -ForegroundColor Yellow
-git branch -M main
-
-# Add remote origin (remove if exists first)
-Write-Host "`n🔗 Adding remote origin..." -ForegroundColor Yellow
-$existingRemote = git remote get-url origin 2>$null
-if ($existingRemote) {
-    Write-Host "Remote already exists: $existingRemote" -ForegroundColor Yellow
-    git remote remove origin
-}
-git remote add origin https://github.com/CodeXPrim8/BU.git
+Write-Host ""
 
 # Push to GitHub
-Write-Host "`n⬆️  Pushing to GitHub..." -ForegroundColor Yellow
-Write-Host "⚠️  You may be prompted for GitHub credentials" -ForegroundColor Yellow
-Write-Host "   Use your GitHub username and a Personal Access Token (not password)" -ForegroundColor Yellow
-git push -u origin main
-
+Write-Host "5. Pushing to GitHub..." -ForegroundColor Yellow
+git push origin main
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "`n✅ Successfully pushed README.md to GitHub!" -ForegroundColor Green
-    Write-Host "`n📦 Next step: Add all other files" -ForegroundColor Cyan
-    Write-Host "   Run: git add ." -ForegroundColor White
-    Write-Host "   Run: git commit -m 'Add all project files'" -ForegroundColor White
-    Write-Host "   Run: git push" -ForegroundColor White
+    Write-Host "   ✓ Successfully pushed to GitHub!" -ForegroundColor Green
 } else {
-    Write-Host "`n❌ Push failed. Please check the error above." -ForegroundColor Red
-    Write-Host "`nCommon issues:" -ForegroundColor Yellow
-    Write-Host "1. Authentication failed - Use Personal Access Token instead of password" -ForegroundColor White
-    Write-Host "2. Repository doesn't exist - Create it on GitHub first" -ForegroundColor White
-    Write-Host "3. Network issues - Check your internet connection" -ForegroundColor White
+    Write-Host "   ✗ Failed to push to GitHub" -ForegroundColor Red
+    Write-Host "   → You may need to authenticate or check your credentials" -ForegroundColor Yellow
+    exit 1
 }
+
+Write-Host ""
+Write-Host "=== Done ===" -ForegroundColor Cyan

@@ -69,10 +69,13 @@ export default function SendBU() {
         setTransfersLoading(true)
         const response = await transferApi.list(50, 0)
         if (response.success && response.data?.transfers) {
+          // Get current user from API
+          const userResponse = await userApi.getMe()
+          const currentUserId = userResponse.success && userResponse.data?.user ? userResponse.data.user.id : null
+          
           const sentTransfers = response.data.transfers
             .filter((t: any) => {
-              const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
-              return t.sender_id === currentUser.id // Only transfers where user is sender
+              return currentUserId && t.sender_id === currentUserId // Only transfers where user is sender
             })
             .map((t: any) => ({
               id: t.id,
@@ -248,9 +251,12 @@ export default function SendBU() {
         // Fetch updated transfer history from API to ensure accuracy
         const historyResponse = await transferApi.list(50, 0)
         if (historyResponse.success && historyResponse.data?.transfers) {
-          const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
+          // Get current user from API
+          const userResponse = await userApi.getMe()
+          const currentUserId = userResponse.success && userResponse.data?.user ? userResponse.data.user.id : null
+          
           const sentTransfers = historyResponse.data.transfers
-            .filter((t: any) => t.sender_id === currentUser.id) // Only transfers where user is sender
+            .filter((t: any) => currentUserId && t.sender_id === currentUserId) // Only transfers where user is sender
             .map((t: any) => ({
               id: t.id,
               recipientUsername: t.receiver?.phone_number || 'User',

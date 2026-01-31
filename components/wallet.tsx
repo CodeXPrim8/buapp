@@ -171,42 +171,70 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
           <div className="text-center py-8 text-muted-foreground">No transactions yet</div>
         ) : (
           <div className="space-y-3">
-            {transactions.map((tx) => (
-            <Card
-              key={tx.id}
-              className="border-border/50 flex items-center justify-between bg-card/50 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`rounded-full p-2 ${
-                    tx.type === 'topup' || tx.type === 'refund' || tx.type === 'bu_transfer'
-                      ? 'bg-primary/20'
-                      : 'bg-destructive/20'
-                  }`}
+            {transactions.map((tx) => {
+              // Determine if transaction is a credit (money coming in) or debit (money going out)
+              const isCredit = () => {
+                // Top-ups are always credits
+                if (tx.type === 'topup') return true
+                
+                // Withdrawals are always debits
+                if (tx.type === 'withdrawal') return false
+                
+                // Purchases are always debits (money going out)
+                if (tx.type === 'purchase') return false
+                
+                // For transfers, check the description
+                // "Received from" = credit, "Sent to" = debit
+                if (tx.type === 'bu_transfer') {
+                  return tx.description.toLowerCase().includes('received from')
+                }
+                
+                // Refunds are credits
+                if (tx.type === 'refund') return true
+                
+                // Default: check description
+                return tx.description.toLowerCase().includes('received')
+              }
+              
+              const credit = isCredit()
+              
+              return (
+                <Card
+                  key={tx.id}
+                  className="border-border/50 flex items-center justify-between bg-card/50 p-4"
                 >
-                  {tx.type === 'topup' || tx.type === 'refund' || tx.type === 'bu_transfer' ? (
-                    <ArrowDown className="h-4 w-4 text-primary" />
-                  ) : (
-                    <ArrowUp className="h-4 w-4 text-destructive" />
-                  )}
-                </div>
-                <div>
-                  <p className="font-medium">{tx.description}</p>
-                  <p className="text-xs text-muted-foreground">{tx.date}</p>
-                </div>
-              </div>
-              <span
-                className={`font-semibold ${
-                  tx.type === 'topup' || tx.type === 'refund' || tx.type === 'bu_transfer'
-                    ? 'text-primary'
-                    : 'text-foreground'
-                }`}
-              >
-                {tx.type === 'topup' || tx.type === 'refund' || tx.type === 'bu_transfer' ? '+' : '-'}₦
-                {tx.amount.toLocaleString()}
-              </span>
-            </Card>
-            ))}
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`rounded-full p-2 ${
+                        credit
+                          ? 'bg-green-400/20'
+                          : 'bg-red-400/20'
+                      }`}
+                    >
+                      {credit ? (
+                        <ArrowDown className="h-4 w-4 text-green-400" />
+                      ) : (
+                        <ArrowUp className="h-4 w-4 text-red-400" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium">{tx.description}</p>
+                      <p className="text-xs text-muted-foreground">{tx.date}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={`font-semibold ${
+                      credit
+                        ? 'text-green-400'
+                        : 'text-red-400'
+                    }`}
+                  >
+                    {credit ? '+' : '-'}₦
+                    {tx.amount.toLocaleString()}
+                  </span>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

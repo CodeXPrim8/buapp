@@ -15,17 +15,16 @@ if (supabaseAnonKey && (supabaseAnonKey.includes('your_supabase') || supabaseAno
   // Don't throw here, let Supabase handle the error with a clearer message
 }
 
-// #region agent log
-if (typeof window === 'undefined') {
-  const envAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  const envPublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || ''
-  fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/supabase.ts:8',message:'Supabase config check',data:{hasUrl:!!supabaseUrl,urlLength:supabaseUrl?.length||0,envAnonKeyExists:!!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,envAnonKeyLength:envAnonKey.length,envAnonKeyPrefix:envAnonKey.substring(0,30),envPublishableKeyExists:!!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,envPublishableKeyLength:envPublishableKey.length,envPublishableKeyPrefix:envPublishableKey.substring(0,30),finalAnonKeyLength:supabaseAnonKey?.length||0,finalAnonKeyPrefix:supabaseAnonKey?.substring(0,30)||'none',finalAnonKeySuffix:supabaseAnonKey?.substring(Math.max(0,supabaseAnonKey.length-30))||'none'},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-}
-// #endregion agent log
+// Check for service role key (bypasses RLS) - only use server-side
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const useServiceRole = !!supabaseServiceRoleKey && typeof window === 'undefined'
 
 // Create Supabase client for server-side operations
-// Add db schema option to ensure we're using the public schema
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Use service role key if available (bypasses RLS for login queries)
+// Otherwise use anon key (subject to RLS)
+const clientKey = useServiceRole ? supabaseServiceRoleKey : supabaseAnonKey
+
+export const supabase = createClient(supabaseUrl, clientKey, {
   db: {
     schema: 'public',
   },

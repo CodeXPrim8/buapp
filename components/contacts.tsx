@@ -121,14 +121,11 @@ export default function Contacts({ onNavigate }: ContactsProps) {
 
     try {
       setSendingRequest(true)
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contacts.tsx:110',message:'Sending friend request',data:{phoneNumber:newContactPhone},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       
       const response = await friendRequestsApi.send({
         phone_number: newContactPhone,
         message: newContactMessage || undefined,
       })
-
-      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contacts.tsx:118',message:'Friend request response received',data:{success:response.success,error:response.error,hasError:!!response.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
 
       if (response.success) {
         setAlertPopup({
@@ -385,7 +382,6 @@ export default function Contacts({ onNavigate }: ContactsProps) {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'contacts.tsx:294',message:'Contact clicked',data:{contactId:contact.id,contactName:contact.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
                     onNavigate?.('send-bu', { recipientId: contact.id })
                   }}
                 >

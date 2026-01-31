@@ -55,6 +55,28 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
       return data as User
     }
   }
+  
+  // Diagnostic: Check what phone numbers exist in database (last 4 digits match)
+  if (digitsOnly.length >= 4) {
+    const last4 = digitsOnly.slice(-4)
+    const { data: allUsers, error: searchError } = await supabase
+      .from('users')
+      .select('id, phone_number, role')
+      .like('phone_number', `%${last4}`)
+    
+    // Diagnostic: Try to get ANY users to check database access
+    const { data: anyUsers, error: anyError, count } = await supabase
+      .from('users')
+      .select('id, phone_number, role', { count: 'exact' })
+      .limit(5)
+    
+    // Diagnostic: Try searching for "0813" pattern (common Nigerian format)
+    const { data: localFormatUsers, error: localError } = await supabase
+      .from('users')
+      .select('id, phone_number, role')
+      .like('phone_number', '%0813%')
+      .limit(10)
+  }
 
   // If exact match fails, try partial match (last 10 digits)
   if (digitsOnly.length >= 10) {
@@ -80,7 +102,6 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
       }
     }
   }
-
   console.log('getUserByPhone - User not found with any format')
   return null
 }
@@ -106,23 +127,11 @@ export async function createUser(userData: {
   role: 'user' | 'celebrant' | 'vendor' | 'both' | 'admin' | 'superadmin'
   pin_hash: string
 }): Promise<User | null> {
-  // #region agent log
-  if (typeof window === 'undefined') {
-    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/auth.ts:109',message:'Before createUser insert',data:{phoneNumber:userData.phone_number?.substring(0,5)+'***',role:userData.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-  }
-  // #endregion agent log
-  
   const { data, error } = await supabase
     .from('users')
     .insert([userData])
     .select()
     .single()
-
-  // #region agent log
-  if (typeof window === 'undefined') {
-    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/auth.ts:120',message:'After createUser insert',data:{hasData:!!data,hasError:!!error,errorCode:error?.code,errorMessage:error?.message,errorDetails:error?.details,errorHint:error?.hint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
-  }
-  // #endregion agent log
 
   if (error) {
     console.error('Error creating user:', error)

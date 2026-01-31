@@ -32,18 +32,46 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform transfers to transaction format
-    const transactions = transfers?.map((transfer: any) => ({
-      id: transfer.id,
-      type: transfer.type === 'gateway_qr' ? 'bu_transfer' : 
-            transfer.sender_id === userId ? 'purchase' : 'bu_transfer',
-      amount: transfer.amount,
-      date: transfer.created_at,
-      description: transfer.sender_id === userId
-        ? `Sent to ${transfer.receiver?.first_name || 'User'}`
-        : `Received from ${transfer.sender?.first_name || 'User'}`,
-      status: transfer.status,
-      message: transfer.message,
-    })) || []
+    const transactions = transfers?.map((transfer: any) => {
+      // Check if this is a topup (has "top-up" or "topup" in message)
+      const isTopup = transfer.message && (
+        transfer.message.toLowerCase().includes('top-up') || 
+        transfer.message.toLowerCase().includes('topup') ||
+        transfer.message.toLowerCase().includes('wallet top')
+      )
+      
+      // If it's a topup, treat it as a credit
+      if (isTopup) {
+        return {
+          id: transfer.id,
+          type: 'topup',
+          amount: transfer.amount,
+          date: transfer.created_at,
+          description: 'Wallet Top-up',
+          status: transfer.status,
+          message: transfer.message,
+        }
+      }
+      
+      // Regular transfer logic
+      const isSender = transfer.sender_id === userId
+      const isReceiver = transfer.receiver_id === userId
+      
+      return {
+        id: transfer.id,
+        type: transfer.type === 'gateway_qr' ? 'bu_transfer' : 
+              isSender ? 'purchase' : 'bu_transfer',
+        amount: transfer.amount,
+        date: transfer.created_at,
+        description: isSender
+          ? `Sent to ${transfer.receiver?.first_name || 'User'}`
+          : isReceiver
+            ? `Received from ${transfer.sender?.first_name || 'User'}`
+            : 'Transfer',
+        status: transfer.status,
+        message: transfer.message,
+      }
+    }) || []
 
     return successResponse({ transactions, total: transactions.length })
   } catch (error: any) {

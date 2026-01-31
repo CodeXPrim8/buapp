@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthCookie } from '@/lib/cookies'
 import { verifyToken } from '@/lib/jwt'
+import { verifyCSRF } from '@/lib/csrf'
 
 // API Response helpers
 export function successResponse(data: any, status = 200) {

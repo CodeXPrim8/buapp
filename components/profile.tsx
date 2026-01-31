@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { X } from 'lucide-react'
 import { userApi } from '@/lib/api-client'
+import ThemeSelector from '@/components/theme-selector'
 
 interface ProfileProps {
   onNavigate?: (page: string) => void
   onLogout?: () => void
+  theme?: string
 }
 
-export default function Profile({ onNavigate, onLogout }: ProfileProps) {
+export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
   const [userData, setUserData] = useState<{ 
     id?: string
     name: string
@@ -31,6 +33,15 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
   })
   const [saving, setSaving] = useState(false)
   const [upgradingVendor, setUpgradingVendor] = useState(false)
+  const [showCustomizationModal, setShowCustomizationModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showPNDModal, setShowPNDModal] = useState(false)
+  const [changingPin, setChangingPin] = useState(false)
+  const [pinForm, setPinForm] = useState({
+    currentPin: '',
+    newPin: '',
+    confirmPin: '',
+  })
 
   useEffect(() => {
     fetchUserData()
@@ -52,29 +63,12 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
           role: user.role,
         })
       } else {
-        // Fallback to localStorage
-        const storedUser = localStorage.getItem('currentUser')
-        if (storedUser) {
-          const user = JSON.parse(storedUser)
-          setUserData({
-            name: user.name,
-            phoneNumber: user.phoneNumber,
-            role: user.role,
-          })
-        }
+        // No fallback - user must be authenticated via API
+        console.warn('User not authenticated')
       }
     } catch (error) {
       console.error('Failed to fetch user data:', error)
-      // Fallback to localStorage
-      const storedUser = localStorage.getItem('currentUser')
-      if (storedUser) {
-        const user = JSON.parse(storedUser)
-        setUserData({
-          name: user.name,
-          phoneNumber: user.phoneNumber,
-          role: user.role,
-        })
-      }
+      // No fallback - user must be authenticated via API
     } finally {
       setLoading(false)
     }
@@ -123,14 +117,9 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
           role: updatedUser.role,
         })
         
-        // Update localStorage
-        const storedUser = localStorage.getItem('currentUser')
-        if (storedUser) {
-          const user = JSON.parse(storedUser)
-          user.name = updatedUser.name
-          localStorage.setItem('currentUser', JSON.stringify(user))
-        }
-
+        // Refresh user data from API
+        await fetchUserData()
+        
         setShowEditModal(false)
         alert('Profile updated successfully!')
       } else {
@@ -145,7 +134,16 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
   }
 
   const handleUpgradeToVendor = async () => {
-    if (!userData) return
+    if (!userData) {
+      alert('User data not loaded. Please try again.')
+      return
+    }
+
+    // Check if already has vendor access
+    if (userData.role === 'vendor' || userData.role === 'both') {
+      alert('You already have vendor access! Switch to Vendor mode from the dashboard to access vendor features.')
+      return
+    }
 
     const confirmed = confirm(
       'Register as Vendor?\n\n' +
@@ -161,48 +159,58 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
 
     try {
       setUpgradingVendor(true)
+      console.log('[Profile] Starting vendor upgrade for user:', userData.id, 'Current role:', userData.role)
+      
       const response = await userApi.update({
         upgrade_to_vendor: true,
       })
 
+      console.log('[Profile] Vendor upgrade response:', response)
+
       if (response.success && response.data?.user) {
         const updatedUser = response.data.user
         const newRole = updatedUser.role
+        
+        console.log('[Profile] Upgrade successful. New role:', newRole)
         
         setUserData({
           ...userData,
           role: newRole,
         })
         
-        // Update localStorage with new role
-        const storedUser = localStorage.getItem('currentUser')
-        if (storedUser) {
-          const user = JSON.parse(storedUser)
-          user.role = newRole
-          localStorage.setItem('currentUser', JSON.stringify(user))
-        }
+        // Refresh user data from API to get latest role
+        await fetchUserData()
 
-        alert('Successfully registered as Vendor! You now have access to vendor features. Switch to Vendor mode from the dashboard.')
+        const successMessage = response.data?.message || 'Successfully registered as Vendor! You now have access to vendor features. Switch to Vendor mode from the dashboard.'
+        alert(successMessage)
         
         // Refresh the page to update mode switcher and navigation
         window.location.reload()
       } else {
-        alert(response.error || 'Failed to register as vendor')
+        const errorMessage = response.error || response.data?.message || 'Failed to register as vendor. Please try again.'
+        console.error('[Profile] Vendor upgrade failed:', errorMessage, response)
+        alert(errorMessage)
       }
     } catch (error: any) {
-      console.error('Upgrade to vendor error:', error)
-      alert(error.message || 'Failed to register as vendor')
+      console.error('[Profile] Upgrade to vendor error:', error)
+      const errorMessage = error.message || error.error || 'Failed to register as vendor. Please check your connection and try again.'
+      alert(errorMessage)
     } finally {
       setUpgradingVendor(false)
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (onLogout) {
       onLogout()
     } else {
-      localStorage.removeItem('isAuthenticated')
-      localStorage.removeItem('currentUser')
+      // Fallback: try to call logout API and reload
+      try {
+        const { authApi } = await import('@/lib/api-client')
+        await authApi.logout()
+      } catch (error) {
+        console.error('Logout error:', error)
+      }
       window.location.reload()
     }
   }
@@ -211,8 +219,76 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
     if (item.action) {
       onNavigate?.(item.action)
     } else {
-      // Show placeholder message for features not yet implemented
-      alert(`${item.title}\n\n${item.desc}\n\nThis feature is coming soon!`)
+      // Handle specific menu items
+      switch (item.title) {
+        case 'My Accounts':
+          onNavigate?.('wallet')
+          break
+        case 'Contactless Pay':
+          onNavigate?.('receive-bu')
+          break
+        case 'Customization':
+          setShowCustomizationModal(true)
+          break
+        case 'Settings':
+          setShowSettingsModal(true)
+          break
+        case 'Request PND':
+          setShowPNDModal(true)
+          break
+        default:
+          alert(`${item.title}\n\n${item.desc}\n\nThis feature is coming soon!`)
+      }
+    }
+  }
+
+  const handleChangePin = async () => {
+    if (!pinForm.currentPin || !pinForm.newPin || !pinForm.confirmPin) {
+      alert('Please fill in all PIN fields')
+      return
+    }
+
+    if (pinForm.currentPin.length !== 6 || !/^\d+$/.test(pinForm.currentPin)) {
+      alert('Current PIN must be 6 digits')
+      return
+    }
+
+    if (pinForm.newPin.length !== 6 || !/^\d+$/.test(pinForm.newPin)) {
+      alert('New PIN must be 6 digits')
+      return
+    }
+
+    if (pinForm.newPin !== pinForm.confirmPin) {
+      alert('New PIN and confirm PIN do not match')
+      return
+    }
+
+    if (pinForm.currentPin === pinForm.newPin) {
+      alert('New PIN must be different from current PIN')
+      return
+    }
+
+    try {
+      setChangingPin(true)
+      
+      // Call user update API with PIN change
+      const response = await userApi.update({
+        current_pin: pinForm.currentPin,
+        new_pin: pinForm.newPin,
+      })
+
+      if (response.success) {
+        alert('PIN changed successfully!')
+        setShowSettingsModal(false)
+        setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+      } else {
+        alert(response.error || 'Failed to change PIN. Please verify your current PIN is correct.')
+      }
+    } catch (error: any) {
+      console.error('Change PIN error:', error)
+      alert(error.message || error.error || 'Failed to change PIN. Please try again.')
+    } finally {
+      setChangingPin(false)
     }
   }
 
@@ -238,6 +314,10 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
                 ? 'Vendor'
                 : userData?.role === 'celebrant'
                 ? 'Celebrant'
+                : userData?.role === 'admin'
+                ? 'Admin'
+                : userData?.role === 'superadmin'
+                ? 'Guest + Celebrant + Vendor + Admin + Superadmin'
                 : userData?.role || 'User'}
             </p>
             <button 
@@ -295,7 +375,11 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
           ].map((item, idx) => (
             <button
               key={idx}
-              onClick={() => handleMenuItemClick(item)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleMenuItemClick(item)
+              }}
               className="rounded-xl bg-card p-4 text-left transition hover:bg-card/80"
             >
               <div className="mb-3 text-3xl">{item.icon}</div>
@@ -318,7 +402,14 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
 
       {/* Edit Profile Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditModal(false)
+            }
+          }}
+        >
           <Card className="w-full max-w-md border-primary/20 bg-card p-6">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-xl font-bold">Edit Profile</h3>
@@ -365,7 +456,7 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
               </div>
 
               {/* Register as Vendor Section */}
-              {userData && userData.role !== 'vendor' && userData.role !== 'both' && (
+              {userData && userData.role !== 'vendor' && userData.role !== 'both' && userData.role !== 'admin' && userData.role !== 'superadmin' && (
                 <div className="border-t border-border pt-4">
                   <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                     <div className="flex items-start gap-3">
@@ -388,7 +479,7 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
                 </div>
               )}
 
-              {userData && (userData.role === 'vendor' || userData.role === 'both') && (
+              {userData && (userData.role === 'vendor' || userData.role === 'both' || userData.role === 'admin' || userData.role === 'superadmin') && (
                 <div className="border-t border-border pt-4">
                   <div className="rounded-lg border border-green-400/20 bg-green-400/5 p-4">
                     <div className="flex items-center gap-2">
@@ -416,6 +507,224 @@ export default function Profile({ onNavigate, onLogout }: ProfileProps) {
                   className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Customization Modal */}
+      {showCustomizationModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCustomizationModal(false)
+            }
+          }}
+        >
+          <Card className="w-full max-w-md border-primary/20 bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold">Customization</h3>
+              <button
+                onClick={() => setShowCustomizationModal(false)}
+                className="rounded-full p-1 hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-semibold mb-2 block">Theme</label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Change your app theme color. Tap the colored circle below to cycle through themes.
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm">Current Theme:</span>
+                  <ThemeSelector 
+                    theme={theme || (typeof window !== 'undefined' ? localStorage.getItem('bison-theme') || 'theme-pink' : 'theme-pink')}
+                    onThemeChange={(newTheme) => {
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('bison-theme', newTheme)
+                        document.documentElement.className = newTheme
+                        // Reload to apply theme changes
+                        setTimeout(() => window.location.reload(), 300)
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <Button
+                  onClick={() => setShowCustomizationModal(false)}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSettingsModal(false)
+              setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+            }
+          }}
+        >
+          <Card className="w-full max-w-md border-primary/20 bg-card p-6 max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold">Settings</h3>
+              <button
+                onClick={() => {
+                  setShowSettingsModal(false)
+                  setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+                }}
+                className="rounded-full p-1 hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Change PIN Section */}
+              <div>
+                <h4 className="font-semibold mb-3">Change PIN</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-semibold mb-2 block">Current PIN</label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pinForm.currentPin}
+                      onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value.replace(/\D/g, '') })}
+                      className="bg-secondary text-foreground"
+                      placeholder="Enter current 6-digit PIN"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold mb-2 block">New PIN</label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pinForm.newPin}
+                      onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value.replace(/\D/g, '') })}
+                      className="bg-secondary text-foreground"
+                      placeholder="Enter new 6-digit PIN"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold mb-2 block">Confirm New PIN</label>
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pinForm.confirmPin}
+                      onChange={(e) => setPinForm({ ...pinForm, confirmPin: e.target.value.replace(/\D/g, '') })}
+                      className="bg-secondary text-foreground"
+                      placeholder="Confirm new 6-digit PIN"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleChangePin}
+                    disabled={changingPin || !pinForm.currentPin || !pinForm.newPin || !pinForm.confirmPin}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {changingPin ? 'Changing PIN...' : 'Change PIN'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Security Info */}
+              <div className="border-t border-border pt-4">
+                <h4 className="font-semibold mb-2">Security Information</h4>
+                <div className="text-sm text-muted-foreground space-y-2">
+                  <p>• Your PIN is encrypted and stored securely</p>
+                  <p>• Never share your PIN with anyone</p>
+                  <p>• Use a unique PIN that you don't use elsewhere</p>
+                  <p>• Change your PIN regularly for better security</p>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  onClick={() => {
+                    setShowSettingsModal(false)
+                    setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Request PND Modal */}
+      {showPNDModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowPNDModal(false)
+            }
+          }}
+        >
+          <Card className="w-full max-w-md border-primary/20 bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold">Request Post No Debit (PND)</h3>
+              <button
+                onClick={() => setShowPNDModal(false)}
+                className="rounded-full p-1 hover:bg-secondary"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <h4 className="font-semibold mb-2">What is PND?</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Post No Debit (PND) restriction prevents all debit transactions on your account, 
+                  providing an extra layer of security. This means no money can be withdrawn or 
+                  transferred from your account until the restriction is lifted.
+                </p>
+                <h4 className="font-semibold mb-2 mt-4">How to Request PND:</h4>
+                <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
+                  <li>Contact customer support via phone or email</li>
+                  <li>Provide your account details and verification</li>
+                  <li>Request PND restriction to be placed on your account</li>
+                  <li>To remove PND, contact support again</li>
+                </ol>
+              </div>
+
+              <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-3">
+                <p className="text-xs text-yellow-400">
+                  ⚠️ <strong>Important:</strong> PND will prevent ALL transactions including legitimate ones. 
+                  Make sure you understand the implications before requesting this restriction.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  onClick={() => setShowPNDModal(false)}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  I Understand
                 </Button>
               </div>
             </div>

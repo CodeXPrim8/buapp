@@ -1,8 +1,26 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getAuthUser } from '@/lib/api-helpers'
+import { errorResponse } from '@/lib/api-helpers'
 
-// Comprehensive database diagnostic
-export async function GET() {
+// Comprehensive database diagnostic - ADMIN ONLY
+// Disabled in production by default
+export async function GET(request: NextRequest) {
+  // Disable in production unless explicitly enabled
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
+    return errorResponse('Diagnostic endpoints are disabled in production', 404)
+  }
+
+  // Require admin authentication
+  const authUser = await getAuthUser(request)
+  if (!authUser) {
+    return errorResponse('Authentication required', 401)
+  }
+
+  // Check if user is admin or superadmin
+  if (authUser.role !== 'admin' && authUser.role !== 'superadmin' && authUser.role !== 'super_admin') {
+    return errorResponse('Admin access required', 403)
+  }
   const diagnostics: any = {
     timestamp: new Date().toISOString(),
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,

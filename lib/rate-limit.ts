@@ -1,5 +1,6 @@
-// Simple in-memory rate limiter
-// For production, use Redis or Upstash for distributed rate limiting
+// Rate limiter with Supabase persistence
+// Falls back to in-memory if Supabase table doesn't exist
+// For production, consider Redis/Upstash for better performance
 
 interface RateLimitEntry {
   count: number

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
+import { withCSRFProtection } from '@/lib/api-middleware'
 
 // Create invites (POST) - Celebrant sends invites to guests
-export async function POST(request: NextRequest) {
+export const POST = withCSRFProtection(async function POST(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
     if (!authUser || !authUser.userId) {
@@ -317,7 +318,7 @@ export async function POST(request: NextRequest) {
       )
     }
   }
-}
+})
 
 // Get invites (GET) - Get invites for current user or for an event
 export async function GET(request: NextRequest) {

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody, getAuthUser } from '@/lib/api-helpers'
+import { withCSRFProtection } from '@/lib/api-middleware'
 
 // Top up wallet (in production, this would integrate with payment gateway)
-export async function POST(request: NextRequest) {
+export const POST = withCSRFProtection(async function POST(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
     if (!authUser) {
@@ -50,10 +51,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a transfer record for the topup
+    // For topups, the user is the receiver (money coming in)
     const { error: transferError } = await supabase
       .from('transfers')
       .insert([{
-        sender_id: userId,
+        receiver_id: userId,
         amount: amount,
         type: 'transfer',
         status: 'completed',
@@ -73,4 +75,4 @@ export async function POST(request: NextRequest) {
     console.error('Top up error:', error)
     return errorResponse('Internal server error', 500)
   }
-}
+})

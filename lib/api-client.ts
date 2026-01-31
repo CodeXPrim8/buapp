@@ -44,11 +44,11 @@ export async function apiCall<T = any>(
       responseText = await response.text()
     } catch (readError: any) {
       console.error('Failed to read response body:', readError)
-      return {
-        success: false,
-        error: 'Failed to read server response',
+        return {
+          success: false,
+          error: 'Failed to read server response',
+        }
       }
-    }
 
     // Check content type
     const contentType = response.headers.get('content-type')
@@ -350,6 +350,8 @@ export const userApi = {
     last_name?: string
     email?: string
     upgrade_to_vendor?: boolean
+    current_pin?: string
+    new_pin?: string
   }) => api.put('/users/me', data, true),
 
   search: (query: string, manual?: boolean) => api.get(`/users/search?q=${encodeURIComponent(query)}${manual ? '&manual=true' : ''}`, true),

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody } from '@/lib/api-helpers'
 import { verifyPin } from '@/lib/auth'
+import { withCSRFProtection } from '@/lib/api-middleware'
 
 // Create direct transfer between users
-export async function POST(request: NextRequest) {
+export const POST = withCSRFProtection(async function POST(request: NextRequest) {
   try {
     // Verify authentication using JWT
     const { getAuthUser } = await import('@/lib/api-helpers')
@@ -217,7 +218,7 @@ export async function POST(request: NextRequest) {
     console.error('Transfer error:', error)
     return errorResponse('Internal server error', 500)
   }
-}
+})
 
 // Get transfer history
 export async function GET(request: NextRequest) {

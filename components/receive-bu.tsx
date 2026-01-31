@@ -59,16 +59,7 @@ export default function ReceiveBU() {
         }
       } catch (error) {
         console.error('Failed to fetch receive data:', error)
-        // Fallback to localStorage
-        const storedUser = localStorage.getItem('currentUser')
-        if (storedUser) {
-          const user = JSON.parse(storedUser)
-          setUserInfo({
-            id: user.id || '',
-            name: user.name || 'User',
-            phoneNumber: user.phoneNumber || '',
-          })
-        }
+        // No fallback - user must be authenticated via API
       } finally {
         setLoading(false)
       }

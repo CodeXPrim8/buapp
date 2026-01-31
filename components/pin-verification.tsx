@@ -74,18 +74,11 @@ export default function PinVerification({
       
       // PIN verification happens on the backend
       // Just pass the PIN to the callback - the API will verify it
-      const storedUser = localStorage.getItem('currentUser')
-      if (storedUser) {
-        onVerify(pinToVerify)
-        // Reset after a delay to allow for error handling
-        setTimeout(() => {
-          setIsVerifying(false)
-        }, 2000)
-      } else {
-        alert('User not found. Please login again.')
-        onCancel()
+      onVerify(pinToVerify)
+      // Reset after a delay to allow for error handling
+      setTimeout(() => {
         setIsVerifying(false)
-      }
+      }, 2000)
     }
   }
 
