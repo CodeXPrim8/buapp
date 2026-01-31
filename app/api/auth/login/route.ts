@@ -8,9 +8,33 @@ import { checkAccountLockout, recordFailedAttempt, clearFailedAttempts } from '@
 import { logLoginAttempt, getClientIP, getUserAgent } from '@/lib/audit-log'
 import { setCSRFToken } from '@/lib/csrf'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
+
+// #region agent log helper
+const logPath = path.join(process.cwd(), '.cursor', 'debug.log')
+const writeLog = (data: any) => {
+  try {
+    const logLine = JSON.stringify(data) + '\n'
+    fs.appendFileSync(logPath, logLine, 'utf8')
+  } catch (e) {
+    // Fallback to console if file write fails (e.g., on Vercel)
+    console.log('[DEBUG]', JSON.stringify(data))
+  }
+}
+// #endregion
 
 export async function POST(request: NextRequest) {
   try {
+    // Log Supabase configuration at login start
+    const { supabase } = await import('@/lib/supabase')
+    console.log('[LOGIN] Starting login attempt - Supabase config check:', {
+      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceRoleKeyLength: process.env.SUPABASE_SERVICE_ROLE_KEY?.length || 0,
+      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      anonKeyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length || 0
+    })
+    
     // Apply rate limiting
     const rateLimitResult = await rateLimiters.login(request)
     if (!rateLimitResult.allowed) {
@@ -52,6 +76,10 @@ export async function POST(request: NextRequest) {
     const ipAddress = getClientIP(request)
     const userAgent = getUserAgent(request)
 
+    // #region agent log
+    writeLog({location:'route.ts:52',message:'Login request received',data:{phoneNumber:phone_number?.substring(0,5)+'***',pinLength:pin?.length,hasPhone:!!phone_number,hasPin:!!pin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'});
+    // #endregion
+
     // Get user
     let user
     try {
@@ -62,6 +90,10 @@ export async function POST(request: NextRequest) {
         role: user?.role,
         phoneNumber: phone_number?.substring(0, 5) + '***'
       })
+
+      // #region agent log
+      writeLog({location:'route.ts:65',message:'User lookup completed',data:{found:!!user,userId:user?.id,role:user?.role,phoneNumber:phone_number?.substring(0,5)+'***'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'});
+      // #endregion
     } catch (error: any) {
       console.error('Error fetching user during login:', error)
       return errorResponse('Database error during login. Please try again.', 500)
@@ -89,9 +121,20 @@ export async function POST(request: NextRequest) {
     // Verify PIN
     let isValidPin
     try {
+      // #region agent log
+      writeLog({location:'route.ts:92',message:'PIN verification starting',data:{hasPinHash:!!user.pin_hash,pinHashLength:user.pin_hash?.length,pinLength:pin?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
+      // #endregion
+
       isValidPin = await verifyPin(pin, user.pin_hash)
+
+      // #region agent log
+      writeLog({location:'route.ts:96',message:'PIN verification completed',data:{isValidPin:isValidPin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
+      // #endregion
     } catch (error: any) {
       console.error('Error verifying PIN:', error)
+      // #region agent log
+      writeLog({location:'route.ts:98',message:'PIN verification error',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'});
+      // #endregion
       return errorResponse('Error verifying credentials. Please try again.', 500)
     }
 

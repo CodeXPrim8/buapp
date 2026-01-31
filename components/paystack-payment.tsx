@@ -37,6 +37,7 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
   const [initializing, setInitializing] = useState(false)
   const [error, setError] = useState('')
   const [scriptLoaded, setScriptLoaded] = useState(false)
+  const [paymentReference, setPaymentReference] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if Paystack is already loaded
@@ -133,6 +134,11 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
         return
       }
 
+      // Store reference for fallback verification
+      const paymentRef = response.data.reference
+      setPaymentReference(paymentRef)
+      console.log('[PAYSTACK] Payment initialized with reference:', paymentRef)
+
       // Wait for Paystack script to be loaded
       setInitializing(true)
       
@@ -164,10 +170,12 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
 
       // Define callback function separately (Paystack doesn't support async callbacks directly)
       const handlePaymentCallback = (paymentResponse: any) => {
+        console.log('[PAYSTACK] Callback fired with reference:', paymentResponse?.reference)
         // Handle payment verification asynchronously
         ;(async () => {
           try {
             setLoading(true)
+            console.log('[PAYSTACK] Calling verify endpoint with reference:', paymentResponse.reference)
             // Verify payment on server
             const verifyResponse = await apiCall('/payments/paystack/verify', {
               method: 'POST',
@@ -175,11 +183,15 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
                 reference: paymentResponse.reference,
               }),
             })
+            console.log('[PAYSTACK] Verify response:', { success: verifyResponse.success, error: verifyResponse.error, data: verifyResponse.data })
 
             if (verifyResponse.success) {
               // Payment successful
+              console.log('[PAYSTACK] Verification successful, updating wallet')
               setLoading(false)
               setInitializing(false)
+              // Show success message
+              alert(`Payment successful! Your wallet has been credited with ₦${verifyResponse.data?.amount || amount}.`)
               if (onSuccess) {
                 onSuccess()
               } else {
@@ -187,12 +199,13 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
                 window.location.href = '/?page=wallet'
               }
             } else {
+              console.error('[PAYSTACK] Verification failed:', verifyResponse.error)
               setError(verifyResponse.error || 'Payment verification failed. Please contact support.')
               setLoading(false)
               setInitializing(false)
             }
           } catch (verifyError: any) {
-            console.error('Payment verification error:', verifyError)
+            console.error('[PAYSTACK] Payment verification error:', verifyError)
             setError('Payment verification failed. Please contact support.')
             setLoading(false)
             setInitializing(false)
@@ -208,6 +221,37 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
           ref: response.data.reference,
           callback: handlePaymentCallback, // Pass function reference, not async function
           onClose: () => {
+            console.log('[PAYSTACK] Payment popup closed, reference:', paymentRef)
+            // If payment was closed but we have a reference, try to verify it
+            // (in case payment completed but callback didn't fire)
+            if (paymentRef) {
+              console.log('[PAYSTACK] Attempting fallback verification for reference:', paymentRef)
+              // Try to verify payment after a short delay (in case payment was successful)
+              setTimeout(async () => {
+                try {
+                  const verifyResponse = await apiCall('/payments/paystack/verify', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      reference: paymentRef,
+                    }),
+                  })
+                  if (verifyResponse.success) {
+                    console.log('[PAYSTACK] Fallback verification successful')
+                    alert(`Payment verified! Your wallet has been credited with ₦${verifyResponse.data?.amount || amount}.`)
+                    if (onSuccess) {
+                      onSuccess()
+                    } else {
+                      window.location.href = '/?page=wallet'
+                    }
+                    return
+                  } else {
+                    console.log('[PAYSTACK] Fallback verification failed (payment may not have completed):', verifyResponse.error)
+                  }
+                } catch (err) {
+                  console.error('[PAYSTACK] Fallback verification error:', err)
+                }
+              }, 2000) // Wait 2 seconds before checking
+            }
             setLoading(false)
             setInitializing(false)
             if (onCancel) {

@@ -1,6 +1,21 @@
 import * as bcrypt from 'bcryptjs'
 import { supabase } from './supabase'
 import { User } from './db/types'
+import fs from 'fs'
+import path from 'path'
+
+// #region agent log helper
+const logPath = path.join(process.cwd(), '.cursor', 'debug.log')
+const writeLog = (data: any) => {
+  try {
+    const logLine = JSON.stringify(data) + '\n'
+    fs.appendFileSync(logPath, logLine, 'utf8')
+  } catch (e) {
+    // Fallback to console if file write fails (e.g., on Vercel)
+    console.log('[DEBUG]', JSON.stringify(data))
+  }
+}
+// #endregion
 
 // Hash PIN
 export async function hashPin(pin: string): Promise<string> {
@@ -25,6 +40,10 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
   if (digitsOnly.startsWith('234')) {
     formatsToTry.push('+' + digitsOnly)
     formatsToTry.push(digitsOnly) // 2348012345678
+    // Also try local format (08131074911) if we have 13 digits (234 + 10)
+    if (digitsOnly.length === 13) {
+      formatsToTry.push('0' + digitsOnly.substring(3)) // 08131074911
+    }
   } else if (digitsOnly.startsWith('0')) {
     // Format 2: 08012345678 (local format)
     formatsToTry.push(digitsOnly) // 08012345678
@@ -42,17 +61,49 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
   console.log('getUserByPhone - Input:', phoneNumber)
   console.log('getUserByPhone - Formats to try:', formatsToTry)
 
+  // #region agent log
+  writeLog({location:'auth.ts:45',message:'Starting phone number lookup',data:{inputPhone:phoneNumber?.substring(0,5)+'***',formatsToTry:formatsToTry},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+  // #endregion
+
   // Try each format
   for (const format of formatsToTry) {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone_number', format)
-      .maybeSingle()
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone_number', format)
+        .maybeSingle()
 
-    if (!error && data) {
-      console.log('getUserByPhone - Found user with format:', format)
-      return data as User
+      // #region agent log
+      writeLog({location:'auth.ts:50',message:'Database query result',data:{format:format?.substring(0,5)+'***',hasData:!!data,hasError:!!error,errorCode:error?.code,errorMessage:error?.message,errorDetails:error?.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      // #endregion
+
+      if (error) {
+        console.error(`[getUserByPhone] Query error for format ${format.substring(0, 5)}***:`, {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        })
+        // If it's a permission error (RLS), log it but continue trying other formats
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.error('[getUserByPhone] ⚠️ RLS/Permission error detected. Service role key may be needed.')
+          writeLog({location:'auth.ts:75',message:'RLS permission error',data:{format:format?.substring(0,5)+'***',errorCode:error?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'});
+        }
+        continue
+      }
+
+      if (data) {
+        console.log('getUserByPhone - Found user with format:', format)
+        // #region agent log
+        writeLog({location:'auth.ts:56',message:'User found',data:{format:format?.substring(0,5)+'***',userId:data?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+        // #endregion
+        return data as User
+      }
+    } catch (queryError: any) {
+      console.error(`[getUserByPhone] Exception querying format ${format.substring(0, 5)}***:`, queryError)
+      writeLog({location:'auth.ts:85',message:'Query exception',data:{format:format?.substring(0,5)+'***',error:queryError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      continue
     }
   }
   
@@ -103,6 +154,9 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
     }
   }
   console.log('getUserByPhone - User not found with any format')
+  // #region agent log
+  writeLog({location:'auth.ts:106',message:'User not found after all formats',data:{inputPhone:phoneNumber?.substring(0,5)+'***'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+  // #endregion
   return null
 }
 

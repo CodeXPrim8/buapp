@@ -38,11 +38,25 @@ export async function verifyCSRF(request: NextRequest): Promise<boolean> {
   // Get token from header
   const headerToken = request.headers.get(CSRF_HEADER)
   
+  console.log('[CSRF VERIFY]', {
+    method,
+    hasCookieToken: !!cookieToken,
+    hasHeaderToken: !!headerToken,
+    cookieTokenPrefix: cookieToken?.substring(0, 10),
+    headerTokenPrefix: headerToken?.substring(0, 10),
+  })
+  
   if (!cookieToken || !headerToken) {
+    console.error('[CSRF VERIFY] Missing tokens:', { cookieToken: !!cookieToken, headerToken: !!headerToken })
     return false
   }
   
-  return verifyCSRFToken(headerToken, cookieToken)
+  const isValid = verifyCSRFToken(headerToken, cookieToken)
+  if (!isValid) {
+    console.error('[CSRF VERIFY] Token mismatch')
+  }
+  
+  return isValid
 }
 
 /**

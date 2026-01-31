@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 import { verifyPin, hashPin } from '@/lib/auth'
 import { withCSRFProtection } from '@/lib/api-middleware'
+import { setCSRFToken } from '@/lib/csrf'
 
 // Get current user profile
 export async function GET(request: NextRequest) {
@@ -40,13 +41,16 @@ export async function GET(request: NextRequest) {
       if (userByPhone) {
         console.log('[GET /users/me] Found user by phone number:', { foundId: userByPhone.id, tokenId: userId })
         // User exists but token has wrong ID - return user data but this indicates token mismatch
-        return successResponse({
+        const response = successResponse({
           user: {
             ...userByPhone,
             name: `${userByPhone.first_name} ${userByPhone.last_name}`,
             phoneNumber: userByPhone.phone_number,
           },
         })
+        // Ensure CSRF token is set
+        setCSRFToken(response)
+        return response
       }
       
       // User from token doesn't exist - token is invalid, return 401 to force re-authentication
@@ -54,13 +58,18 @@ export async function GET(request: NextRequest) {
       return errorResponse('Authentication invalid - please log in again', 401)
     }
 
-    return successResponse({
+    const response = successResponse({
       user: {
         ...user,
         name: `${user.first_name} ${user.last_name}`,
         phoneNumber: user.phone_number,
       },
     })
+    
+    // Always set CSRF token on authenticated requests to ensure it's available
+    setCSRFToken(response)
+    
+    return response
   } catch (error: any) {
     console.error('Get user error:', error)
     return errorResponse('Internal server error', 500)

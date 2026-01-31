@@ -1,24 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Detect build time (similar to JWT validation)
-const isBuildTime = 
-  process.env.NEXT_PHASE === 'phase-production-build' || 
-  process.env.NEXT_PHASE === 'phase-development' ||
-  process.env.VERCEL === '1' ||
-  process.env.VERCEL_ENV !== undefined ||
-  process.env.CI === '1'
-
 // Supabase configuration
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://cmqtnppqpksvyhtqrcqi.supabase.co'
 // Support both variable names (anon_key is standard, publishable_key is what user provided)
 let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || ''
 
-// During build time, use a dummy key to prevent errors
-// The client won't be used during build, but Supabase requires a non-empty key
-const buildTimeDummyKey = 'build-time-dummy-key-not-used-in-runtime'
-
-// Validate that we have a real API key (not a placeholder) - only at runtime
-if (!isBuildTime && supabaseAnonKey && (supabaseAnonKey.includes('your_supabase') || supabaseAnonKey.length < 50)) {
+// Validate that we have a real API key (not a placeholder)
+if (supabaseAnonKey && (supabaseAnonKey.includes('your_supabase') || supabaseAnonKey.length < 50)) {
   console.error('⚠️  WARNING: Invalid or placeholder Supabase API key detected!')
   console.error('   Key length:', supabaseAnonKey.length)
   console.error('   Key preview:', supabaseAnonKey.substring(0, 30))
@@ -34,20 +22,28 @@ const useServiceRole = !!supabaseServiceRoleKey && typeof window === 'undefined'
 // Create Supabase client for server-side operations
 // Use service role key if available (bypasses RLS for login queries)
 // Otherwise use anon key (subject to RLS)
-// During build time or when keys are missing, use dummy key to prevent initialization errors
-let clientKey: string
-if (isBuildTime) {
-  // Always use dummy key during build
-  clientKey = buildTimeDummyKey
-} else if (useServiceRole && supabaseServiceRoleKey) {
-  // Use service role key if available
-  clientKey = supabaseServiceRoleKey
-} else if (supabaseAnonKey) {
-  // Use anon key if available
-  clientKey = supabaseAnonKey
-} else {
-  // Fallback to dummy key if no keys available (shouldn't happen in production)
-  clientKey = buildTimeDummyKey
+const clientKey = useServiceRole ? supabaseServiceRoleKey : supabaseAnonKey
+
+// Log which key is being used (for debugging, but don't log the actual key)
+if (typeof window === 'undefined') {
+  console.log('[Supabase] Server-side client initialized:', {
+    hasServiceRoleKey: !!supabaseServiceRoleKey,
+    serviceRoleKeyLength: supabaseServiceRoleKey?.length || 0,
+    usingServiceRole: useServiceRole,
+    hasAnonKey: !!supabaseAnonKey && supabaseAnonKey.length > 50,
+    anonKeyLength: supabaseAnonKey?.length || 0,
+    clientKeyLength: clientKey?.length || 0,
+    envCheck: {
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'NOT SET',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'
+    }
+  })
+  
+  // Warn if service role key is expected but not found
+  if (!supabaseServiceRoleKey && process.env.NODE_ENV === 'production') {
+    console.warn('[Supabase] ⚠️  WARNING: SUPABASE_SERVICE_ROLE_KEY not found in production!')
+    console.warn('[Supabase] This may cause RLS permission errors. Check Vercel environment variables.')
+  }
 }
 
 export const supabase = createClient(supabaseUrl, clientKey, {
@@ -58,15 +54,5 @@ export const supabase = createClient(supabaseUrl, clientKey, {
 
 // Create Supabase client for client-side operations (with RLS)
 export const createSupabaseClient = () => {
-  // Use dummy key during build, actual key at runtime
-  let key: string
-  if (isBuildTime) {
-    key = buildTimeDummyKey
-  } else if (supabaseAnonKey) {
-    key = supabaseAnonKey
-  } else {
-    // Fallback to dummy key if no key available
-    key = buildTimeDummyKey
-  }
-  return createClient(supabaseUrl, key)
+  return createClient(supabaseUrl, supabaseAnonKey)
 }

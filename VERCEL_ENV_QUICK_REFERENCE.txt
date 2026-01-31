@@ -1,0 +1,75 @@
+═══════════════════════════════════════════════════════════════
+  VERCEL ENVIRONMENT VARIABLES - QUICK REFERENCE
+═══════════════════════════════════════════════════════════════
+
+Copy these values directly into Vercel Dashboard:
+
+───────────────────────────────────────────────────────────────
+1. JWT_SECRET
+───────────────────────────────────────────────────────────────
+Key: JWT_SECRET
+Value: UMAE/pfdirzUt0Nl+MHMpy62CvkZ8xqlPcy9xJiCmoM=
+☑️ Encrypted: YES
+Environments: Production, Preview, Development
+
+───────────────────────────────────────────────────────────────
+2. NEXT_PUBLIC_SUPABASE_URL
+───────────────────────────────────────────────────────────────
+Key: NEXT_PUBLIC_SUPABASE_URL
+Value: https://cmqtnppqpksvyhtqrcqi.supabase.co
+☑️ Encrypted: NO
+Environments: Production, Preview, Development
+
+───────────────────────────────────────────────────────────────
+3. NEXT_PUBLIC_SUPABASE_ANON_KEY
+───────────────────────────────────────────────────────────────
+Key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+Value: [GET FROM SUPABASE DASHBOARD]
+   → Go to: https://supabase.com/dashboard
+   → Select your project
+   → Settings → API
+   → Copy "anon" or "public" key (100+ characters)
+☑️ Encrypted: NO
+Environments: Production, Preview, Development
+
+⚠️ IMPORTANT: This must be your ACTUAL Supabase key, not a placeholder!
+
+───────────────────────────────────────────────────────────────
+4. NEXT_PUBLIC_APP_URL
+───────────────────────────────────────────────────────────────
+Key: NEXT_PUBLIC_APP_URL
+Value: https://bu-app.vercel.app
+   (Update with actual Vercel URL after first deploy)
+☑️ Encrypted: NO
+Environments: Production, Preview
+
+───────────────────────────────────────────────────────────────
+HOW TO GET SUPABASE ANON KEY:
+───────────────────────────────────────────────────────────────
+1. Go to: https://supabase.com/dashboard
+2. Sign in to your account
+3. Select your project (or create one)
+4. Click "Settings" (gear icon) → "API"
+5. Under "Project API keys", find "anon" or "public"
+6. Click "Reveal" to show the full key
+7. Copy the ENTIRE key (it's very long, 100+ characters)
+8. Paste it as the value for NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+The key should look like:
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6...
+
+───────────────────────────────────────────────────────────────
+VERCEL SETUP STEPS:
+───────────────────────────────────────────────────────────────
+1. Go to: https://vercel.com/dashboard
+2. Click "Add New..." → "Project"
+3. Import repository: CodeXPrim8/BU
+4. BEFORE clicking "Deploy", click "Environment Variables"
+5. Add each variable above (copy-paste the values)
+6. Make sure JWT_SECRET is marked as "Encrypted"
+7. Click "Save"
+8. Go back and click "Deploy"
+9. Wait for build to complete
+10. Visit your app URL!
+
+═══════════════════════════════════════════════════════════════

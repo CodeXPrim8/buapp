@@ -128,6 +128,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
     // Normalize phone number
     const normalizedPhone = normalizePhoneNumber(formData.phoneNumber)
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.tsx:122',message:'Login attempt started',data:{originalPhone:formData.phoneNumber,normalizedPhone:normalizedPhone,pinLength:formData.pin.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+
     setIsSubmitting(true)
 
     try {
@@ -135,6 +139,10 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         phone_number: normalizedPhone,
         pin: formData.pin,
       })
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.tsx:137',message:'Login API response received',data:{success:response.success,hasUser:!!response.data?.user,error:response.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       if (!response.success || !response.data?.user) {
         alert(response.error || 'Invalid phone number or PIN')

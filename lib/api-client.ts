@@ -14,6 +14,24 @@ interface ApiResponse<T = any> {
   errors?: string[]
 }
 
+/**
+ * Get CSRF token from cookie (client-side only)
+ */
+function getCSRFToken(): string | null {
+  if (typeof document === 'undefined') {
+    return null
+  }
+  
+  // Read CSRF token from cookie
+  const cookies = document.cookie.split(';')
+  const csrfCookie = cookies.find(c => c.trim().startsWith('csrf-token='))
+  if (csrfCookie) {
+    return csrfCookie.split('=')[1]?.trim() || null
+  }
+  
+  return null
+}
+
 // Main API call function
 // Note: Authentication is now handled via httpOnly cookies (JWT tokens)
 // Cookies are automatically sent with requests, no need for manual headers
@@ -23,9 +41,51 @@ export async function apiCall<T = any>(
 ): Promise<ApiResponse<T>> {
   const { requireAuth = false, headers = {}, ...fetchOptions } = options
 
+  // Get CSRF token for state-modifying requests
+  const method = (fetchOptions.method || 'GET').toUpperCase()
+  const needsCSRF = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+  let csrfToken = needsCSRF ? getCSRFToken() : null
+  
+  // If CSRF token is missing for a state-modifying request, try to refresh it first
+  // Only refresh if this is NOT already a GET /users/me call (to avoid infinite loop)
+  if (needsCSRF && !csrfToken && endpoint !== '/users/me') {
+    console.warn('[API CLIENT] CSRF token missing for', method, endpoint, '- Attempting to refresh...')
+    
+    // Try to get CSRF token by calling getMe directly (which sets CSRF token)
+    // Use direct fetch, not apiCall, to avoid recursion
+    try {
+      const refreshResponse = await fetch(`${API_BASE}/users/me`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (refreshResponse.ok) {
+        // CSRF token should now be set in cookie, try reading it again
+        csrfToken = getCSRFToken()
+        if (csrfToken) {
+          console.log('[API CLIENT] CSRF token refreshed successfully')
+        } else {
+          console.warn('[API CLIENT] CSRF token still missing after refresh attempt')
+          console.warn('[API CLIENT] Available cookies:', typeof document !== 'undefined' ? document.cookie : 'N/A (SSR)')
+        }
+      } else {
+        console.warn('[API CLIENT] Failed to refresh CSRF token - user may not be authenticated')
+      }
+    } catch (refreshError) {
+      console.error('[API CLIENT] Failed to refresh CSRF token:', refreshError)
+    }
+  } else if (needsCSRF && !csrfToken) {
+    console.warn('[API CLIENT] CSRF token missing for', method, endpoint)
+    console.warn('[API CLIENT] Available cookies:', typeof document !== 'undefined' ? document.cookie : 'N/A (SSR)')
+  }
+
   // Build headers
   const requestHeaders: HeadersInit = {
     'Content-Type': 'application/json',
+    ...(csrfToken && { 'x-csrf-token': csrfToken }),
     ...headers,
   }
 

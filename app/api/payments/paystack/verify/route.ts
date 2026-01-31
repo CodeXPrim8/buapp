@@ -4,14 +4,17 @@ import { supabase } from '@/lib/supabase'
 
 // Verify Paystack payment and credit wallet
 export async function POST(request: NextRequest) {
+  console.log('[PAYSTACK VERIFY] Endpoint called')
   try {
     const authUser = await getAuthUser(request)
+    console.log('[PAYSTACK VERIFY] Auth check:', { hasAuth: !!authUser, userId: authUser?.userId })
     if (!authUser) {
       return errorResponse('Authentication required', 401)
     }
 
     const body = await request.json()
     const { reference } = body
+    console.log('[PAYSTACK VERIFY] Reference received:', reference)
 
     if (!reference || typeof reference !== 'string') {
       return errorResponse('Payment reference is required', 400)
@@ -34,9 +37,15 @@ export async function POST(request: NextRequest) {
     })
 
     const verifyData = await verifyResponse.json()
+    console.log('[PAYSTACK VERIFY] Paystack API response:', { 
+      ok: verifyResponse.ok, 
+      status: verifyData.status, 
+      paymentStatus: verifyData.data?.status,
+      amount: verifyData.data?.amount 
+    })
 
     if (!verifyResponse.ok || !verifyData.status) {
-      console.error('Paystack verification error:', verifyData)
+      console.error('[PAYSTACK VERIFY] Paystack verification error:', verifyData)
       return errorResponse(
         verifyData.message || 'Payment verification failed',
         400
@@ -45,6 +54,7 @@ export async function POST(request: NextRequest) {
 
     // Check if payment was successful
     if (verifyData.data.status !== 'success') {
+      console.error('[PAYSTACK VERIFY] Payment not successful:', verifyData.data.status)
       return errorResponse(`Payment ${verifyData.data.status}. Please try again.`, 400)
     }
 
@@ -54,8 +64,10 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('message', `Wallet top-up - ${reference}`)
       .single()
+    console.log('[PAYSTACK VERIFY] Duplicate check:', { hasExistingTransfer: !!existingTransfer, reference })
 
     if (existingTransfer) {
+      console.log('[PAYSTACK VERIFY] Payment already processed')
       return errorResponse('This payment has already been processed', 400)
     }
 
@@ -75,25 +87,41 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('user_id', authUser.userId)
       .single()
+    console.log('[PAYSTACK VERIFY] Wallet fetch:', { 
+      hasWallet: !!wallet, 
+      hasError: !!walletError, 
+      currentBalance: wallet?.balance,
+      userId: authUser.userId 
+    })
 
     if (walletError) {
-      console.error('Wallet fetch error:', walletError)
+      console.error('[PAYSTACK VERIFY] Wallet fetch error:', walletError)
       return errorResponse('Wallet not found', 404)
     }
 
     // Update wallet balance
+    const oldBalance = parseFloat(wallet.balance)
+    const newBalance = oldBalance + amountInNaira
+    console.log('[PAYSTACK VERIFY] Updating wallet:', { oldBalance, amountInNaira, newBalance })
+    
     const { data: updatedWallet, error: updateError } = await supabase
       .from('wallets')
       .update({
-        balance: (parseFloat(wallet.balance) + amountInNaira).toString(),
+        balance: newBalance.toString(),
         naira_balance: (parseFloat(wallet.naira_balance) + amountInNaira).toString(),
       })
       .eq('user_id', authUser.userId)
       .select()
       .single()
+    console.log('[PAYSTACK VERIFY] Wallet update result:', { 
+      hasUpdatedWallet: !!updatedWallet, 
+      hasError: !!updateError, 
+      updatedBalance: updatedWallet?.balance,
+      errorMessage: updateError?.message 
+    })
 
     if (updateError) {
-      console.error('Wallet update error:', updateError)
+      console.error('[PAYSTACK VERIFY] Wallet update error:', updateError)
       return errorResponse('Failed to update wallet: ' + updateError.message, 500)
     }
 
@@ -108,12 +136,19 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         message: `Wallet top-up - ${reference}`,
       }])
+    console.log('[PAYSTACK VERIFY] Transfer record creation:', { 
+      hasError: !!transferError, 
+      errorMessage: transferError?.message,
+      amount: amountInNaira, 
+      reference 
+    })
 
     if (transferError) {
-      console.error('Transfer record creation error:', transferError)
+      console.error('[PAYSTACK VERIFY] Transfer record creation error:', transferError)
       // Don't fail the request, just log the error
     }
 
+    console.log('[PAYSTACK VERIFY] Verification successful:', { amount: amountInNaira, reference })
     return successResponse({
       wallet: updatedWallet,
       amount: amountInNaira,
@@ -121,7 +156,7 @@ export async function POST(request: NextRequest) {
       message: 'Payment verified and wallet credited successfully',
     })
   } catch (error: any) {
-    console.error('Payment verification error:', error)
+    console.error('[PAYSTACK VERIFY] Exception:', error)
     return errorResponse('Failed to verify payment: ' + error.message, 500)
   }
 }

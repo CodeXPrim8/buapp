@@ -234,11 +234,17 @@ export default function Home() {
               {currentPage === 'paystack-payment' && (
                 <PaystackPayment
                   onSuccess={() => {
+                    console.log('[PAYSTACK] Success callback fired, navigating to wallet')
                     handleNavigate('wallet')
-                    // Refresh wallet data by reloading
-                    window.location.reload()
+                    // Small delay to ensure navigation happens, then reload to refresh wallet
+                    setTimeout(() => {
+                      window.location.reload()
+                    }, 100)
                   }}
-                  onCancel={() => handleNavigate('wallet')}
+                  onCancel={() => {
+                    console.log('[PAYSTACK] Cancel callback fired')
+                    handleNavigate('wallet')
+                  }}
                 />
               )}
             </>
