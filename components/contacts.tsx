@@ -45,10 +45,13 @@ interface FriendRequest {
 
 interface ContactsProps {
   onNavigate?: (page: string, data?: any) => void
+  initialData?: any
 }
 
-export default function Contacts({ onNavigate }: ContactsProps) {
-  const [activeTab, setActiveTab] = useState<'contacts' | 'requests'>('contacts')
+export default function Contacts({ onNavigate, initialData }: ContactsProps) {
+  const [activeTab, setActiveTab] = useState<'contacts' | 'requests'>(
+    initialData?.tab === 'requests' ? 'requests' : 'contacts'
+  )
   const [contacts, setContacts] = useState<Contact[]>([])
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([])
@@ -65,6 +68,13 @@ export default function Contacts({ onNavigate }: ContactsProps) {
     message: '',
     type: 'info',
   })
+
+  // Update active tab when initialData changes
+  useEffect(() => {
+    if (initialData?.tab === 'requests') {
+      setActiveTab('requests')
+    }
+  }, [initialData])
 
   useEffect(() => {
     fetchData()

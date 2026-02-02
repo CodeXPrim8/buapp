@@ -209,6 +209,20 @@ export default function SprayingQR() {
         status: 'completed',
       }, ...transfers])
 
+      // Update balance cache after successful transfer
+      try {
+        const { walletApi } = await import('@/lib/api-client')
+        const balanceResponse = await walletApi.getMe()
+        if (balanceResponse.success && balanceResponse.data?.wallet) {
+          const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('cached_balance', newBalance.toString())
+          }
+        }
+      } catch (error) {
+        console.error('Failed to update balance cache:', error)
+      }
+
       // Notifications are created by the API, but we can also create local ones for immediate UI feedback
       createNotification({
         type: 'transfer_sent',

@@ -436,13 +436,14 @@ export const eventsApi = {
     strictly_by_invitation?: boolean
   }) => api.post('/events', data, true),
 
-  list: (params?: { city?: string; category?: string; search?: string; public?: boolean; tickets_only?: boolean }) => {
+  list: (params?: { city?: string; category?: string; search?: string; public?: boolean; tickets_only?: boolean; my_events?: boolean }) => {
     const queryParams = new URLSearchParams()
     if (params?.city) queryParams.append('city', params.city)
     if (params?.category) queryParams.append('category', params.category)
     if (params?.search) queryParams.append('search', params.search)
     if (params?.public) queryParams.append('public', 'true')
     if (params?.tickets_only) queryParams.append('tickets_only', 'true')
+    if (params?.my_events) queryParams.append('my_events', 'true')
     const queryString = queryParams.toString()
     return api.get(`/events${queryString ? `?${queryString}` : ''}`, true)
   },

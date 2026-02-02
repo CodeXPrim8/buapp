@@ -213,12 +213,19 @@ export function ReceiptModal({ open, onOpenChange, receipt }: ReceiptModalProps)
             </Button>
             <Button
               onClick={handleShare}
-              className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              variant="outline"
+              className="flex-1"
             >
               <Share2 className="h-4 w-4 mr-2" />
               Share
             </Button>
           </div>
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            Done
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

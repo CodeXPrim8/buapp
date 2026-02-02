@@ -140,6 +140,20 @@ export default function Redemption({
       })
       
       if (response.success) {
+        // Update balance cache after withdrawal (balance will decrease)
+        try {
+          const { walletApi } = await import('@/lib/api-client')
+          const balanceResponse = await walletApi.getMe()
+          if (balanceResponse.success && balanceResponse.data?.wallet) {
+            const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('cached_balance', newBalance.toString())
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update balance cache:', error)
+        }
+        
         // Refresh withdrawals list
         const withdrawalsResponse = await withdrawalsApi.list(50, 0)
         if (withdrawalsResponse.success && withdrawalsResponse.data?.withdrawals) {

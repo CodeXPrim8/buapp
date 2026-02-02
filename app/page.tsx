@@ -230,7 +230,7 @@ export default function Home() {
               {currentPage === 'event-info' && <EventInfo eventId={pageData} onNavigate={handleNavigate} />}
               {currentPage === 'send-bu' && <SendBU />}
               {currentPage === 'receive-bu' && <ReceiveBU />}
-              {currentPage === 'contacts' && <Contacts onNavigate={handleNavigate} />}
+              {currentPage === 'contacts' && <Contacts onNavigate={handleNavigate} initialData={pageData} />}
               {currentPage === 'paystack-payment' && (
                 <PaystackPayment
                   onSuccess={() => {

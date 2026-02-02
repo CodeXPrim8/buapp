@@ -12,7 +12,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
   const [userName, setUserName] = useState<string>('User')
   const [greeting, setGreeting] = useState<string>('Good Evening')
-  const [balance, setBalance] = useState<number>(0)
+  // Initialize balance from cache if available, otherwise null to show loading
+  const [balance, setBalance] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('cached_balance')
+      return cached ? parseFloat(cached) : null
+    }
+    return null
+  })
   const [loading, setLoading] = useState(true)
   const [invites, setInvites] = useState<any[]>([])
   const [invitesLoading, setInvitesLoading] = useState(true)
@@ -58,7 +65,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         const walletResponse = await walletApi.getMe()
         if (walletResponse.success && walletResponse.data?.wallet) {
           const wallet = walletResponse.data.wallet
-          setBalance(parseFloat(wallet.balance || '0'))
+          const newBalance = parseFloat(wallet.balance || '0')
+          setBalance(newBalance)
+          // Cache balance for faster loading on next visit
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('cached_balance', newBalance.toString())
+          }
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error)
@@ -150,6 +162,32 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // Poll for notifications every 10 seconds
     const notificationInterval = setInterval(fetchNotifications, 10000)
+    
+    // Refresh balance when page becomes visible (user returns to app)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Refresh balance when user returns to the app
+        const refreshBalance = async () => {
+          try {
+            const walletResponse = await walletApi.getMe()
+            if (walletResponse.success && walletResponse.data?.wallet) {
+              const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+              setBalance(newBalance)
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('cached_balance', newBalance.toString())
+              }
+            }
+          } catch (error) {
+            console.error('Failed to refresh balance:', error)
+          }
+        }
+        refreshBalance()
+      }
+    }
+    
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
 
     // Listen for storage events (when notifications are marked as read)
     const handleStorageChange = () => {
@@ -169,6 +207,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       clearInterval(notificationInterval)
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('notifications-updated', handleNotificationUpdate)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
     }
   }, [])
 
@@ -207,10 +248,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <p className="text-sm opacity-90">ɃU Balance</p>
           <div className="flex items-center justify-between">
             <div className="text-3xl font-bold">
-              {loading ? (
+              {loading && balance === null ? (
                 <span className="text-lg">Loading...</span>
               ) : balanceVisible ? (
-                `Ƀ ${balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                `Ƀ ${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               ) : (
                 'Ƀ ••••••'
               )}
@@ -228,10 +269,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="font-mono">
-              {loading ? (
+              {loading && balance === null ? (
                 <span>Loading...</span>
               ) : balanceVisible ? (
-                `≈ ₦${balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                `≈ ₦${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               ) : (
                 '≈ ₦••••••'
               )}
@@ -346,10 +387,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
-      {/* Upcoming Events Section */}
+      {/* Events Around Me Section */}
       <div className="px-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Upcoming Events</h3>
+          <h3 className="text-lg font-bold">Events Around Me</h3>
           <button
             onClick={() => onNavigate('events')}
             className="text-sm text-primary font-semibold"

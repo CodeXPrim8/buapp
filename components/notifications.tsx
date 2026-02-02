@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
-import { Bell, CheckCircle, ArrowDown, Sparkles, X, UserPlus, UserCheck } from 'lucide-react'
+import { Bell, CheckCircle, ArrowDown, ArrowUp, Sparkles, X, UserPlus, UserCheck } from 'lucide-react'
 import { notificationApi, transferApi } from '@/lib/api-client'
 import { ReceiptModal } from '@/components/receipt-modal'
 
@@ -154,7 +154,7 @@ export default function Notifications({ onNavigate }: NotificationsProps = {}) {
       case 'transfer_received':
         return <ArrowDown className="h-5 w-5 text-green-400" />
       case 'transfer_sent':
-        return <ArrowDown className="h-5 w-5 text-primary" />
+        return <ArrowUp className="h-5 w-5 text-primary" />
       case 'event_invite':
         return <Bell className="h-5 w-5 text-yellow-400" />
       case 'ticket_purchased':
@@ -199,126 +199,151 @@ export default function Notifications({ onNavigate }: NotificationsProps = {}) {
           </Card>
         ) : (
           <div className="space-y-3">
-            {notifications.map((notification) => (
-              <Card
-                key={notification.id}
-                className={`border-border/50 bg-card/50 p-4 ${
-                  !notification.read ? 'border-primary/30 bg-primary/5' : ''
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`rounded-full p-2 ${
-                    !notification.read ? 'bg-primary/20' : 'bg-secondary'
-                  }`}>
-                    {getNotificationIcon(notification.type)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className={`font-semibold ${!notification.read ? 'text-primary' : ''}`}>
-                          {notification.title}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {notification.message}
-                        </p>
-                        {notification.amount && (
-                          <p className="text-sm font-bold text-primary mt-1">
-                            Ƀ {notification.amount.toLocaleString()}
-                          </p>
-                        )}
-                        {(notification.type === 'transfer_received' || notification.type === 'transfer_sent') && (
-                          <div className="mt-2">
-                            <button
-                              onClick={async () => {
-                                const transferId = notification.metadata?.transfer_id
-                                if (transferId) {
-                                  try {
-                                    const response = await transferApi.get(transferId)
-                                    if (response.success && response.data?.transfer) {
-                                      const transfer = response.data.transfer
-                                      const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
-                                      const isSent = transfer.sender_id === currentUser.id
-                                      
-                                      setSelectedReceipt({
-                                        id: transfer.id,
-                                        type: isSent ? 'sent' : 'received',
-                                        amount: parseFloat(transfer.amount?.toString() || '0'),
-                                        senderName: transfer.sender ? `${transfer.sender.first_name} ${transfer.sender.last_name}` : 'User',
-                                        senderPhone: transfer.sender?.phone_number || '',
-                                        receiverName: transfer.receiver ? `${transfer.receiver.first_name} ${transfer.receiver.last_name}` : 'User',
-                                        receiverPhone: transfer.receiver?.phone_number || '',
-                                        message: transfer.message || undefined,
-                                        date: new Date(transfer.created_at).toLocaleDateString('en-US', { 
-                                          year: 'numeric', 
-                                          month: 'long', 
-                                          day: 'numeric' 
-                                        }),
-                                        time: new Date(transfer.created_at).toLocaleTimeString('en-US', {
-                                          hour: '2-digit',
-                                          minute: '2-digit'
-                                        }),
-                                        status: transfer.status || 'completed',
-                                      })
-                                      setShowReceipt(true)
-                                    }
-                                  } catch (error) {
-                                    console.error('Failed to fetch transfer:', error)
-                                  }
-                                }
-                              }}
-                              className="text-xs text-primary underline hover:text-primary/80 font-semibold"
-                            >
-                              View Receipt →
-                            </button>
-                          </div>
-                        )}
-                        {(notification.type === 'friend_request' || notification.type === 'friend_request_accepted') && (
-                          <div className="mt-2">
-                            <button
-                              onClick={() => {
-                                if (onNavigate) {
-                                  onNavigate('contacts')
-                                } else if (typeof window !== 'undefined') {
-                                  // Fallback: use URL params
-                                  const currentUrl = new URL(window.location.href)
-                                  currentUrl.searchParams.set('page', 'contacts')
-                                  window.location.href = currentUrl.toString()
-                                }
-                              }}
-                              className="text-xs text-primary underline hover:text-primary/80 font-semibold"
-                            >
-                              View in Contacts →
-                            </button>
-                          </div>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {notification.timestamp}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {!notification.read && (
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                        )}
-                        <button
-                          onClick={() => deleteNotification(notification.id)}
-                          className="rounded-full p-1 hover:bg-secondary"
-                        >
-                          <X className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      </div>
+            {notifications.map((notification) => {
+              // Determine if notification should be clickable
+              const isClickable = notification.type === 'friend_request' || notification.type === 'friend_request_accepted'
+              
+              const handleNotificationClick = () => {
+                if (isClickable && onNavigate) {
+                  // Navigate to contacts page with requests tab active
+                  onNavigate('contacts', { tab: 'requests' })
+                }
+              }
+
+              return (
+                <Card
+                  key={notification.id}
+                  className={`border-border/50 bg-card/50 p-4 ${
+                    !notification.read ? 'border-primary/30 bg-primary/5' : ''
+                  } ${
+                    isClickable ? 'cursor-pointer hover:bg-card/80 transition' : ''
+                  }`}
+                  onClick={isClickable ? handleNotificationClick : undefined}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`rounded-full p-2 ${
+                      !notification.read ? 'bg-primary/20' : 'bg-secondary'
+                    }`}>
+                      {getNotificationIcon(notification.type)}
                     </div>
-                    {!notification.read && (
-                      <button
-                        onClick={() => markAsRead(notification.id)}
-                        className="mt-2 text-xs text-primary"
-                      >
-                        Mark as read
-                      </button>
-                    )}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className={`font-semibold ${!notification.read ? 'text-primary' : ''}`}>
+                            {notification.title}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {notification.message}
+                          </p>
+                          {notification.amount && (
+                            <p className="text-sm font-bold text-primary mt-1">
+                              Ƀ {notification.amount.toLocaleString()}
+                            </p>
+                          )}
+                          {(notification.type === 'transfer_received' || notification.type === 'transfer_sent') && (
+                            <div className="mt-2">
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  const transferId = notification.metadata?.transfer_id
+                                  if (transferId) {
+                                    try {
+                                      const response = await transferApi.get(transferId)
+                                      if (response.success && response.data?.transfer) {
+                                        const transfer = response.data.transfer
+                                        const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
+                                        const isSent = transfer.sender_id === currentUser.id
+                                        
+                                        setSelectedReceipt({
+                                          id: transfer.id,
+                                          type: isSent ? 'sent' : 'received',
+                                          amount: parseFloat(transfer.amount?.toString() || '0'),
+                                          senderName: transfer.sender ? `${transfer.sender.first_name} ${transfer.sender.last_name}` : 'User',
+                                          senderPhone: transfer.sender?.phone_number || '',
+                                          receiverName: transfer.receiver ? `${transfer.receiver.first_name} ${transfer.receiver.last_name}` : 'User',
+                                          receiverPhone: transfer.receiver?.phone_number || '',
+                                          message: transfer.message || undefined,
+                                          date: new Date(transfer.created_at).toLocaleDateString('en-US', { 
+                                            year: 'numeric', 
+                                            month: 'long', 
+                                            day: 'numeric' 
+                                          }),
+                                          time: new Date(transfer.created_at).toLocaleTimeString('en-US', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          }),
+                                          status: transfer.status || 'completed',
+                                        })
+                                        setShowReceipt(true)
+                                      }
+                                    } catch (error) {
+                                      console.error('Failed to fetch transfer:', error)
+                                    }
+                                  }
+                                }}
+                                className="text-xs text-primary underline hover:text-primary/80 font-semibold"
+                              >
+                                View Receipt →
+                              </button>
+                            </div>
+                          )}
+                          {(notification.type === 'friend_request' || notification.type === 'friend_request_accepted') && (
+                            <div className="mt-2">
+                              <span className="text-xs text-primary font-semibold">
+                                Tap to view requests →
+                              </span>
+                            </div>
+                          )}
+                          {notification.type === 'event_invite' && (
+                            <div className="mt-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (onNavigate && notification.metadata?.event_id) {
+                                    onNavigate('event-info', notification.metadata.event_id)
+                                  }
+                                }}
+                                className="text-xs text-primary underline hover:text-primary/80 font-semibold"
+                              >
+                                View Event →
+                              </button>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {notification.timestamp}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!notification.read && (
+                            <div className="h-2 w-2 rounded-full bg-primary" />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteNotification(notification.id)
+                            }}
+                            className="rounded-full p-1 hover:bg-secondary"
+                          >
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        </div>
+                      </div>
+                      {!notification.read && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAsRead(notification.id)
+                          }}
+                          className="mt-2 text-xs text-primary"
+                        >
+                          Mark as read
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

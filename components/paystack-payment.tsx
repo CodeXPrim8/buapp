@@ -188,6 +188,21 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
             if (verifyResponse.success) {
               // Payment successful
               console.log('[PAYSTACK] Verification successful, updating wallet')
+              
+              // Update balance cache immediately
+              try {
+                const { walletApi } = await import('@/lib/api-client')
+                const balanceResponse = await walletApi.getMe()
+                if (balanceResponse.success && balanceResponse.data?.wallet) {
+                  const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.setItem('cached_balance', newBalance.toString())
+                  }
+                }
+              } catch (error) {
+                console.error('Failed to update balance cache:', error)
+              }
+              
               setLoading(false)
               setInitializing(false)
               // Show success message
@@ -237,6 +252,21 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
                   })
                   if (verifyResponse.success) {
                     console.log('[PAYSTACK] Fallback verification successful')
+                    
+                    // Update balance cache immediately
+                    try {
+                      const { walletApi } = await import('@/lib/api-client')
+                      const balanceResponse = await walletApi.getMe()
+                      if (balanceResponse.success && balanceResponse.data?.wallet) {
+                        const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+                        if (typeof window !== 'undefined') {
+                          sessionStorage.setItem('cached_balance', newBalance.toString())
+                        }
+                      }
+                    } catch (error) {
+                      console.error('Failed to update balance cache:', error)
+                    }
+                    
                     alert(`Payment verified! Your wallet has been credited with ₦${verifyResponse.data?.amount || amount}.`)
                     if (onSuccess) {
                       onSuccess()

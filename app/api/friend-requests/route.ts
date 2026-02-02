@@ -116,14 +116,48 @@ export async function POST(request: NextRequest) {
       ? `${sender.first_name || ''} ${sender.last_name || ''}`.trim() || 'a user'
       : 'a user'
 
-    // Create notification for receiver
-    await supabase.from('notifications').insert({
-      user_id: receiver.id,
-      type: 'friend_request',
-      title: 'New Friend Request',
-      message: `You have a new friend request from ${senderName}`,
-      metadata: { friend_request_id: friendRequest.id, sender_id: authUser.userId },
-    })
+    // Verify receiver exists in database (to ensure correct UUID format)
+    const { data: receiverUser, error: receiverCheckError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', receiver.id)
+      .single()
+
+    if (receiverCheckError || !receiverUser) {
+      console.error('Receiver user not found in database:', {
+        receiverId: receiver.id,
+        error: receiverCheckError?.message,
+      })
+      // Don't fail the request, but log the error
+    } else {
+      // Create notification for receiver using verified user ID
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert([{
+          user_id: receiverUser.id, // Use verified user ID
+          type: 'friend_request',
+          title: 'New Friend Request',
+          message: `You have a new friend request from ${senderName}`,
+          metadata: { friend_request_id: friendRequest.id, sender_id: authUser.userId },
+          read: false,
+        }])
+
+      if (notificationError) {
+        console.error('Failed to create friend request notification:', notificationError)
+        console.error('Receiver ID:', receiverUser.id)
+        console.error('Receiver ID type:', typeof receiverUser.id)
+        console.error('Error details:', {
+          code: notificationError.code,
+          message: notificationError.message,
+          details: notificationError.details,
+          hint: notificationError.hint,
+        })
+        // Don't fail the request if notification fails - friend request was created successfully
+        // But log it for debugging
+      } else {
+        console.log('Friend request notification created successfully for user:', receiverUser.id)
+      }
+    }
 
     return successResponse({ friend_request: friendRequest })
   } catch (error: any) {

@@ -31,7 +31,14 @@ interface CelebrantDashboardProps {
 export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardProps) {
   const eventsSectionRef = useRef<HTMLDivElement>(null)
   const [events, setEvents] = useState<Event[]>([])
-  const [mainBalance, setMainBalance] = useState<number>(0)
+  // Initialize balance from cache if available, otherwise null to show loading
+  const [mainBalance, setMainBalance] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('cached_balance')
+      return cached ? parseFloat(cached) : null
+    }
+    return null
+  })
   const [recentTransfers, setRecentTransfers] = useState<BUTransfer[]>([])
   const [loading, setLoading] = useState(true)
   const [greeting, setGreeting] = useState<string>('Good Evening')
@@ -72,11 +79,16 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
         // Fetch wallet balance
         const walletResponse = await walletApi.getMe()
         if (walletResponse.success && walletResponse.data?.wallet) {
-          setMainBalance(parseFloat(walletResponse.data.wallet.balance || '0'))
+          const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+          setMainBalance(newBalance)
+          // Cache balance for faster loading on next visit
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('cached_balance', newBalance.toString())
+          }
         }
 
-        // Fetch events
-        const eventsResponse = await eventsApi.list()
+        // Fetch events - only events created by this user (no public filter)
+        const eventsResponse = await eventsApi.list({ my_events: true })
         console.log('Events API response:', eventsResponse)
         if (eventsResponse.success && eventsResponse.data?.events) {
           const formattedEvents = eventsResponse.data.events.map((e: any) => ({
@@ -123,9 +135,40 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
 
     fetchData()
     
+    // Refresh balance when page becomes visible (user returns to app)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Refresh balance when user returns to the app
+        const refreshBalance = async () => {
+          try {
+            const walletResponse = await walletApi.getMe()
+            if (walletResponse.success && walletResponse.data?.wallet) {
+              const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+              setMainBalance(newBalance)
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('cached_balance', newBalance.toString())
+              }
+            }
+          } catch (error) {
+            console.error('Failed to refresh balance:', error)
+          }
+        }
+        refreshBalance()
+      }
+    }
+    
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+    
     // Refresh every 5 seconds
     const interval = setInterval(fetchData, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }
   }, [])
 
   // Calculate total available in events (not yet withdrawn)
@@ -154,13 +197,23 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
         <div className="space-y-3 rounded-2xl bg-primary-foreground/10 p-4 backdrop-blur">
           <p className="text-sm opacity-90">Main Balance</p>
           <div className="flex items-center justify-between">
-            <div className="text-3xl font-bold">Ƀ {mainBalance.toLocaleString()}</div>
+            <div className="text-3xl font-bold">
+              {mainBalance === null ? (
+                <span className="text-lg">Loading...</span>
+              ) : (
+                `Ƀ ${mainBalance.toLocaleString()}`
+              )}
+            </div>
             <div className="rounded-full bg-primary-foreground/20 p-2">
               <TrendingUp size={20} />
             </div>
           </div>
           <div className="text-sm opacity-90">
-            ≈ ₦{mainBalance.toLocaleString()}
+            {mainBalance === null ? (
+              <span>Loading...</span>
+            ) : (
+              `≈ ₦${mainBalance.toLocaleString()}`
+            )}
           </div>
           {totalAvailableInEvents > 0 && (
             <div className="text-xs opacity-75 pt-2 border-t border-primary-foreground/20">

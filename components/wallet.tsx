@@ -22,7 +22,14 @@ interface WalletProps {
 }
 
 export default function Wallet({ onNavigate }: WalletProps = {}) {
-  const [balance, setBalance] = useState<number>(0)
+  // Initialize balance from cache if available, otherwise null to show loading
+  const [balance, setBalance] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = sessionStorage.getItem('cached_balance')
+      return cached ? parseFloat(cached) : null
+    }
+    return null
+  })
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [showTopup, setShowTopup] = useState(false)
@@ -31,6 +38,23 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
 
   useEffect(() => {
     fetchWalletData()
+    
+    // Refresh balance when page becomes visible (user returns to app)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchWalletData()
+      }
+    }
+    
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+    }
+    
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }
   }, [])
 
   const fetchWalletData = async () => {
@@ -40,7 +64,12 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       // Fetch wallet balance
       const walletResponse = await walletApi.getMe()
       if (walletResponse.success && walletResponse.data?.wallet) {
-        setBalance(parseFloat(walletResponse.data.wallet.balance || '0'))
+        const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+        setBalance(newBalance)
+        // Cache balance for faster loading on next visit
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('cached_balance', newBalance.toString())
+        }
       }
 
       // Fetch transactions
@@ -89,15 +118,15 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       <Card className="border-primary/20 bg-card p-6">
         <p className="text-sm text-muted-foreground">Total Balance</p>
         <h2 className="mt-2 text-4xl font-bold text-primary">
-          {loading ? (
+          {loading && balance === null ? (
             <span className="text-lg">Loading...</span>
           ) : (
-            `₦${balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            `₦${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           )}
         </h2>
         <p className="mt-4 text-sm">
           <span className="font-semibold">
-            {loading ? 'Loading...' : `Ƀ ${balance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {loading && balance === null ? 'Loading...' : `Ƀ ${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span> Available
         </p>
       </Card>

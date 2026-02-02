@@ -196,6 +196,7 @@ export async function GET(request: NextRequest) {
           const search = searchParams.get('search')
           const publicOnly = searchParams.get('public') === 'true'
           const ticketsOnly = searchParams.get('tickets_only') === 'true'
+          const myEvents = searchParams.get('my_events') === 'true'
 
           // Allow vendors to view events for linking gateways
           // If role is vendor or both, show all events; otherwise show only celebrant's events or public events
@@ -208,11 +209,49 @@ export async function GET(request: NextRequest) {
 
           // Filter by role
           if (role !== 'vendor' && role !== 'both') {
-            // For non-vendors: show their own events OR public events with tickets enabled
-            query = query.or(`celebrant_id.eq.${dbUserId},and(is_public.eq.true,tickets_enabled.eq.true)`)
+            // For non-vendors (regular users and celebrants)
+            if (myEvents) {
+              // My Events: only show events created by this user
+              query = query.eq('celebrant_id', dbUserId)
+            } else if (publicOnly || ticketsOnly) {
+              // Events Around Me: show public events with tickets enabled
+              query = query.eq('is_public', true).eq('tickets_enabled', true)
+            } else {
+              // Default: show events user is invited to OR events they created
+              // First, get event IDs the user is invited to
+              const { data: invites } = await supabase
+                .from('invites')
+                .select('event_id')
+                .eq('guest_id', dbUserId)
+              
+              const invitedEventIds = invites?.map(inv => inv.event_id) || []
+              
+              // Build filter: events user created OR events user is invited to
+              if (invitedEventIds.length > 0) {
+                // Get events created by user
+                const { data: createdEvents } = await supabase
+                  .from('events')
+                  .select('id')
+                  .eq('celebrant_id', dbUserId)
+                
+                // Combine event IDs: created + invited
+                const createdEventIds = createdEvents?.map(e => e.id) || []
+                const allEventIds = [...new Set([...createdEventIds, ...invitedEventIds])]
+                
+                if (allEventIds.length > 0) {
+                  query = query.in('id', allEventIds)
+                } else {
+                  // If no events found, return empty result by filtering with non-existent ID
+                  query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+                }
+              } else {
+                // If no invites, only show events created by user
+                query = query.eq('celebrant_id', dbUserId)
+              }
+            }
           } else {
             // Vendors can see all events, but can filter for public ticket sales
-            if (publicOnly) {
+            if (publicOnly || ticketsOnly) {
               query = query.eq('is_public', true).eq('tickets_enabled', true)
             }
           }
@@ -289,12 +328,13 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const publicOnly = searchParams.get('public') === 'true'
     const ticketsOnly = searchParams.get('tickets_only') === 'true'
+    const myEvents = searchParams.get('my_events') === 'true'
 
     console.log('Fetching events for user:', {
       userId: userId,
       dbUserId: dbUserId,
       role: role,
-      filters: { city, category, search, publicOnly, ticketsOnly },
+      filters: { city, category, search, publicOnly, ticketsOnly, myEvents },
     })
 
     // Build query
@@ -305,13 +345,47 @@ export async function GET(request: NextRequest) {
         celebrant:users!events_celebrant_id_fkey(id, phone_number, first_name, last_name)
       `)
 
-    // Filter by role
+    // Filter by role and parameters
     if (role !== 'vendor' && role !== 'both') {
-      // For non-vendors: show their own events OR public events with tickets enabled
-      if (publicOnly || ticketsOnly) {
+      // For non-vendors (regular users and celebrants)
+      if (myEvents) {
+        // My Events: only show events created by this user
+        query = query.eq('celebrant_id', dbUserId)
+      } else if (publicOnly || ticketsOnly) {
+        // Events Around Me: show public events with tickets enabled
         query = query.eq('is_public', true).eq('tickets_enabled', true)
       } else {
-        query = query.eq('celebrant_id', dbUserId)
+        // Default: show events user is invited to OR events they created
+        // First, get event IDs the user is invited to
+        const { data: invites } = await supabase
+          .from('invites')
+          .select('event_id')
+          .eq('guest_id', dbUserId)
+        
+        const invitedEventIds = invites?.map(inv => inv.event_id) || []
+        
+        // Build filter: events user created OR events user is invited to
+        if (invitedEventIds.length > 0) {
+          // Get events created by user
+          const { data: createdEvents } = await supabase
+            .from('events')
+            .select('id')
+            .eq('celebrant_id', dbUserId)
+          
+          // Combine event IDs: created + invited
+          const createdEventIds = createdEvents?.map(e => e.id) || []
+          const allEventIds = [...new Set([...createdEventIds, ...invitedEventIds])]
+          
+          if (allEventIds.length > 0) {
+            query = query.in('id', allEventIds)
+          } else {
+            // If no events found, return empty result by filtering with non-existent ID
+            query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+          }
+        } else {
+          // If no invites, only show events created by user
+          query = query.eq('celebrant_id', dbUserId)
+        }
       }
     } else {
       // Vendors can see all events, but can filter for public ticket sales

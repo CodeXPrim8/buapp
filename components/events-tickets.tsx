@@ -316,9 +316,9 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   return (
     <div className="space-y-6 pb-24 pt-4">
       <div className="px-4">
-        <h2 className="text-xl font-bold mb-4">Upcoming Events</h2>
+        <h2 className="text-xl font-bold mb-4">Events Around Me</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Browse and search for upcoming events and celebrations
+          Browse and search for events and celebrations around you
         </p>
 
         {/* Search and Filters */}

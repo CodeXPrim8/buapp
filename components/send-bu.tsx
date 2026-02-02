@@ -233,9 +233,41 @@ export default function SendBU() {
       })
 
       if (response.success && response.data?.transfer) {
+        const transfer = response.data.transfer
+        
         // Store transfer ID and recipient ID for receipt and "Add to Contacts" option
-        setLastTransferId(response.data.transfer.id)
+        setLastTransferId(transfer.id)
         setLastTransactionRecipient(receiverId)
+        
+        // Get current user info for receipt
+        const userResponse = await userApi.getMe()
+        const currentUser = userResponse.success && userResponse.data?.user ? userResponse.data.user : null
+        
+        // Prepare receipt data
+        const receiptData = {
+          id: transfer.id,
+          type: 'sent' as const,
+          amount: parseFloat(transfer.amount?.toString() || '0'),
+          senderName: currentUser ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'You' : 'You',
+          senderPhone: currentUser?.phoneNumber || '',
+          receiverName: transfer.receiver ? `${transfer.receiver.first_name || ''} ${transfer.receiver.last_name || ''}`.trim() : 'User',
+          receiverPhone: transfer.receiver?.phone_number || '',
+          message: transfer.message || undefined,
+          date: new Date(transfer.created_at).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }),
+          time: new Date(transfer.created_at).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          status: transfer.status || 'completed',
+        }
+        
+        // Show receipt modal
+        setSelectedReceipt(receiptData)
+        setShowReceipt(true)
         
         // Check if recipient is already a contact
         const contactsResponse = await contactsApi.list()
@@ -248,12 +280,26 @@ export default function SendBU() {
           setShowAddToContacts(true)
         }
         
+        // Update balance cache after successful transfer
+        // Fetch fresh balance to update cache
+        try {
+          const { walletApi } = await import('@/lib/api-client')
+          const balanceResponse = await walletApi.getMe()
+          if (balanceResponse.success && balanceResponse.data?.wallet) {
+            const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('cached_balance', newBalance.toString())
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update balance cache:', error)
+        }
+        
         // Fetch updated transfer history from API to ensure accuracy
         const historyResponse = await transferApi.list(50, 0)
         if (historyResponse.success && historyResponse.data?.transfers) {
           // Get current user from API
-          const userResponse = await userApi.getMe()
-          const currentUserId = userResponse.success && userResponse.data?.user ? userResponse.data.user.id : null
+          const currentUserId = currentUser?.id || null
           
           const sentTransfers = historyResponse.data.transfers
             .filter((t: any) => currentUserId && t.sender_id === currentUserId) // Only transfers where user is sender
@@ -283,7 +329,7 @@ export default function SendBU() {
         
         setPendingTransfer(null)
         setShowPinVerification(false)
-        setStep('success')
+        // Don't set step to 'success' - receipt modal will handle the UI
       } else {
         setAlertPopup({
           open: true,
@@ -1084,7 +1130,16 @@ export default function SendBU() {
         {/* Receipt Modal */}
         <ReceiptModal
           open={showReceipt}
-          onOpenChange={setShowReceipt}
+          onOpenChange={(open) => {
+            setShowReceipt(open)
+            // When receipt modal closes, go back to menu
+            if (!open) {
+              setStep('menu')
+              setSelectedReceipt(null)
+              setShowAddToContacts(false)
+              setLastTransactionRecipient(null)
+            }
+          }}
           receipt={selectedReceipt}
         />
       </div>
