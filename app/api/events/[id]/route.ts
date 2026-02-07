@@ -1,36 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { successResponse, errorResponse } from '@/lib/api-helpers'
+import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 
-// Get event details
+// Get event details (auth from JWT cookie, not headers)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    // Handle both Promise and direct params (Next.js 15+ compatibility)
+    const authUser = await getAuthUser(request)
+    if (!authUser) {
+      return errorResponse('Authentication required. Please log in.', 401)
+    }
+
     const resolvedParams = params instanceof Promise ? await params : params
     const eventId = resolvedParams.id
-
-    const userId = request.headers.get('x-user-id')
-    
-    if (!userId) {
-      return errorResponse('User ID required', 401)
-    }
 
     if (!eventId) {
       return errorResponse('Event ID is required', 400)
     }
 
-    // Verify user exists first to get correct UUID format
+    const userId = authUser.userId
+
+    // Verify user exists in DB to get correct UUID format
     const userResult = await supabase
       .from('users')
       .select('id')
-      .eq('id', userId)
+      .eq('id', userId.trim())
       .single()
 
     if (!userResult.data) {
-      console.error('User not found for event lookup. User ID:', userId)
       return errorResponse('User not found. Please login again.', 401)
     }
 
@@ -71,11 +70,21 @@ export async function GET(
 
     console.log('Event found:', event.id, event.name)
 
-    // Verify event belongs to user (optional check, but good for security)
-    // Allow access if user is the celebrant
-    if (event.celebrant_id !== dbUserId) {
-      console.warn('Event access: User is not the celebrant, but allowing access for viewing')
-      // We allow viewing even if not the celebrant, but log it
+    // My Event visibility (non-negotiable): only celebrant OR users who were sent an invite AND have accepted. No one else.
+    // Shows & Parties Around Me (is_around_me): any user can view.
+    const isCelebrant = event.celebrant_id === dbUserId
+    const isAroundMe = event.is_around_me === true
+
+    const { data: userInvite } = await supabase
+      .from('invites')
+      .select('id, status')
+      .eq('event_id', eventId)
+      .eq('guest_id', dbUserId)
+      .maybeSingle()
+    const isInvitedAndAccepted = userInvite?.status === 'accepted'
+
+    if (!isCelebrant && !isAroundMe && !isInvitedAndAccepted) {
+      return errorResponse('You do not have access to this event. You must be invited and have accepted to view this event.', 403)
     }
 
     // Get transfers for this event

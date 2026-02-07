@@ -118,18 +118,19 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const fetchEvents = async () => {
       try {
         setEventsLoading(true)
-        const response = await eventsApi.list({ public: true, tickets_only: true })
+        const userCity = typeof window !== 'undefined' ? localStorage.getItem('user_city') || '' : ''
+        const userState = typeof window !== 'undefined' ? localStorage.getItem('user_state') || '' : ''
+        const response = await eventsApi.list({ around_me: true, user_city: userCity || undefined, user_state: userState || undefined })
         if (response.success && response.data?.events) {
-          // Get only the first 2 events for the dashboard preview
           const upcomingEvents = response.data.events
-            .filter((e: any) => e.tickets_enabled && e.is_public)
+            .filter((e: any) => e.is_around_me)
             .slice(0, 2)
             .map((e: any) => ({
               id: e.id,
               icon: '🎊', // Default icon, can be customized based on category
               title: e.name,
               date: e.date ? new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
-              price: e.ticket_price_bu ? `₦${parseFloat(e.ticket_price_bu.toString()).toLocaleString()}` : 'Free',
+              price: e.ticket_price_bu ? `Ƀ${parseFloat(e.ticket_price_bu.toString()).toLocaleString()}` : 'Free',
               tickets: e.max_tickets 
                 ? (e.max_tickets - (e.tickets_sold || 0) > 0 ? 'Available' : 'Sold Out')
                 : 'Available',
@@ -387,10 +388,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
-      {/* Events Around Me Section */}
-      <div className="px-4">
+      {/* Shows & Parties Around Me Section */}
+        <div className="px-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Events Around Me</h3>
+          <h3 className="text-lg font-bold">Shows & Parties Around Me</h3>
           <button
             onClick={() => onNavigate('events')}
             className="text-sm text-primary font-semibold"
@@ -405,7 +406,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           ) : events.length === 0 ? (
             <div className="rounded-xl bg-card p-3 text-center">
-              <p className="text-sm text-muted-foreground">No upcoming events with tickets available</p>
+              <p className="text-sm text-muted-foreground">No events/parties in your area yet</p>
             </div>
           ) : (
             events.map((item) => (

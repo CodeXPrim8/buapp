@@ -15,11 +15,8 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
     const celebrantId = authUser.userId
     const role = authUser.role
 
-    // Allow users registered as 'user', 'celebrant', or 'both' to create events
-    // Vendors cannot create events
-    if (role === 'vendor') {
-      return errorResponse('Vendors cannot create events', 403)
-    }
+    // Only two event types: (1) Shows & Parties Around Me (superadmin only); (2) My Event (celebrant or vendor only)
+    // Vendors can create My Event only (is_around_me false); they cannot create Shows & Parties Around Me
 
     // Verify user exists in database
     const { data: userCheck } = await supabase
@@ -63,7 +60,9 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       description,
       image_url,
       is_public,
-      tickets_enabled
+      tickets_enabled,
+      // Shows & Parties Around Me: only superadmin can set true
+      is_around_me: bodyIsAroundMe,
     } = body
 
     // Sanitize user inputs
@@ -106,10 +105,17 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
     if (sanitizedCategory !== undefined) eventData.category = sanitizedCategory
     if (sanitizedDescription !== undefined) eventData.description = sanitizedDescription
     if (image_url !== undefined) eventData.image_url = image_url
-    if (is_public !== undefined) eventData.is_public = Boolean(is_public)
-    if (tickets_enabled !== undefined) eventData.tickets_enabled = Boolean(tickets_enabled)
     
-    // Set tickets_sold to 0 for new events
+    // Shows & Parties Around Me: ONLY superadmin can create; always public and tickets enabled
+    // My Event: celebrant or vendor can create; private, invite-only. Never public to other users.
+    const isAroundMe = role === 'superadmin' && bodyIsAroundMe === true
+    if (bodyIsAroundMe === true && role !== 'superadmin') {
+      return errorResponse('Only Super Admin can create Shows & Parties Around Me. Create a My Event instead.', 403)
+    }
+    // Non-negotiable: non-superadmin events are ALWAYS invite-only (is_around_me = false) so only invited+accepted users see them
+    eventData.is_around_me = role === 'superadmin' ? isAroundMe : false
+    eventData.is_public = isAroundMe ? true : (is_public === true)
+    eventData.tickets_enabled = isAroundMe ? true : (tickets_enabled === true)
     eventData.tickets_sold = 0
 
     const { data: event, error } = await supabase
@@ -143,7 +149,7 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
   }
 })
 
-// List events (celebrant's own events)
+// List events. Only two types: Shows & Parties Around Me (around_me=true), My Event (my_events=true or invited+accepted).
 export async function GET(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
@@ -165,7 +171,7 @@ export async function GET(request: NextRequest) {
     console.log('Looking up user in database:', trimmedUserId)
     const { data: dbUser, error: userError } = await supabase
       .from('users')
-      .select('id')
+      .select('id, phone_number')
       .eq('id', trimmedUserId)
       .single()
 
@@ -173,171 +179,42 @@ export async function GET(request: NextRequest) {
       found: !!dbUser,
       error: userError?.message,
       userId: dbUser?.id,
+      phoneNumber: dbUser?.phone_number,
     })
 
     if (userError || !dbUser) {
       console.log('User not found by ID, trying phone number fallback')
-      // Try by phone number as fallback
       if (phoneNumber) {
         const { data: userByPhone } = await supabase
           .from('users')
-          .select('id')
+          .select('id, phone_number')
           .eq('phone_number', phoneNumber)
           .single()
-        
         if (userByPhone) {
-          // Use the database user ID
-          const dbUserId = userByPhone.id
-          
-          // Get query parameters for filtering
-          const { searchParams } = new URL(request.url)
-          const city = searchParams.get('city')
-          const category = searchParams.get('category')
-          const search = searchParams.get('search')
-          const publicOnly = searchParams.get('public') === 'true'
-          const ticketsOnly = searchParams.get('tickets_only') === 'true'
-          const myEvents = searchParams.get('my_events') === 'true'
-
-          // Allow vendors to view events for linking gateways
-          // If role is vendor or both, show all events; otherwise show only celebrant's events or public events
-          let query = supabase
-            .from('events')
-            .select(`
-              *,
-              celebrant:users!events_celebrant_id_fkey(id, phone_number, first_name, last_name)
-            `)
-
-          // Filter by role
-          if (role !== 'vendor' && role !== 'both') {
-            // For non-vendors (regular users and celebrants)
-            if (myEvents) {
-              // My Events: only show events created by this user
-              query = query.eq('celebrant_id', dbUserId)
-            } else if (publicOnly || ticketsOnly) {
-              // Events Around Me: show public events with tickets enabled
-              query = query.eq('is_public', true).eq('tickets_enabled', true)
-            } else {
-              // Default: show events user is invited to OR events they created
-              // First, get event IDs the user is invited to
-              const { data: invites } = await supabase
-                .from('invites')
-                .select('event_id')
-                .eq('guest_id', dbUserId)
-              
-              const invitedEventIds = invites?.map(inv => inv.event_id) || []
-              
-              // Build filter: events user created OR events user is invited to
-              if (invitedEventIds.length > 0) {
-                // Get events created by user
-                const { data: createdEvents } = await supabase
-                  .from('events')
-                  .select('id')
-                  .eq('celebrant_id', dbUserId)
-                
-                // Combine event IDs: created + invited
-                const createdEventIds = createdEvents?.map(e => e.id) || []
-                const allEventIds = [...new Set([...createdEventIds, ...invitedEventIds])]
-                
-                if (allEventIds.length > 0) {
-                  query = query.in('id', allEventIds)
-                } else {
-                  // If no events found, return empty result by filtering with non-existent ID
-                  query = query.eq('id', '00000000-0000-0000-0000-000000000000')
-                }
-              } else {
-                // If no invites, only show events created by user
-                query = query.eq('celebrant_id', dbUserId)
-              }
-            }
-          } else {
-            // Vendors can see all events, but can filter for public ticket sales
-            if (publicOnly || ticketsOnly) {
-              query = query.eq('is_public', true).eq('tickets_enabled', true)
-            }
-          }
-
-          // Filter by city
-          if (city) {
-            query = query.ilike('city', `%${city}%`)
-          }
-
-          // Filter by category
-          if (category) {
-            query = query.eq('category', category)
-          }
-
-          // Filter by search term (name, description, location)
-          if (search) {
-            query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%,city.ilike.%${search}%`)
-          }
-
-          // Filter by tickets enabled
-          if (ticketsOnly) {
-            query = query.eq('tickets_enabled', true)
-          }
-
-          // Only show future events for public browsing
-          if (publicOnly || ticketsOnly) {
-            query = query.gte('date', new Date().toISOString().split('T')[0])
-          }
-
-          query = query.order('date', { ascending: true })
-
-          const { data: events, error } = await query
-
-          if (error) {
-            return errorResponse('Failed to fetch events: ' + error.message, 500)
-          }
-
-          // Calculate total BU received from transfers for each event
-          const eventsWithTotals = await Promise.all(
-            (events || []).map(async (event) => {
-              const { data: transfers } = await supabase
-                .from('transfers')
-                .select('amount')
-                .eq('event_id', event.id)
-                .eq('status', 'completed')
-
-              const totalBU = transfers?.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0) || 0
-
-              return {
-                ...event,
-                total_bu_received: totalBU,
-              }
-            })
-          )
-
-          return successResponse({ events: eventsWithTotals })
+          // Use same dbUser shape so rest of GET uses same logic
+          Object.assign(dbUser ?? {}, { id: userByPhone.id, phone_number: userByPhone.phone_number })
+          if (!dbUser) (request as any)._dbUserFallback = userByPhone
         }
       }
-      
-      console.error('User not found in database. User ID:', userId)
-      console.log('Returning 401 error response')
-      const response = errorResponse('User not found. Please login again.', 401)
-      console.log('Error response created:', response)
-      return response
+      if (!dbUser && !(request as any)._dbUserFallback) {
+        return errorResponse('User not found. Please login again.', 401)
+      }
+    }
+    const dbUserId = dbUser?.id ?? (request as any)._dbUserFallback?.id
+    if (!dbUserId) {
+      return errorResponse('User not found. Please login again.', 401)
     }
 
-    // Use the database user ID
-    const dbUserId = dbUser.id
-
-    // Get query parameters for filtering
+    // Query params: around_me = Shows & Parties Around Me (super-admin catalog); my_events = Celebrant/Vendor "My Event" list; default = Guest invited+accepted only
     const { searchParams } = new URL(request.url)
     const city = searchParams.get('city')
+    const userCity = searchParams.get('user_city') || city // user's location for sorting Shows & Parties Around Me
+    const userState = searchParams.get('user_state')
     const category = searchParams.get('category')
     const search = searchParams.get('search')
-    const publicOnly = searchParams.get('public') === 'true'
-    const ticketsOnly = searchParams.get('tickets_only') === 'true'
+    const aroundMe = searchParams.get('around_me') === 'true'
     const myEvents = searchParams.get('my_events') === 'true'
 
-    console.log('Fetching events for user:', {
-      userId: userId,
-      dbUserId: dbUserId,
-      role: role,
-      filters: { city, category, search, publicOnly, ticketsOnly, myEvents },
-    })
-
-    // Build query
     let query = supabase
       .from('events')
       .select(`
@@ -345,80 +222,52 @@ export async function GET(request: NextRequest) {
         celebrant:users!events_celebrant_id_fkey(id, phone_number, first_name, last_name)
       `)
 
-    // Filter by role and parameters
-    if (role !== 'vendor' && role !== 'both') {
-      // For non-vendors (regular users and celebrants)
-      if (myEvents) {
-        // My Events: only show events created by this user
-        query = query.eq('celebrant_id', dbUserId)
-      } else if (publicOnly || ticketsOnly) {
-        // Events Around Me: show public events with tickets enabled
-        query = query.eq('is_public', true).eq('tickets_enabled', true)
+    // My Event visibility (non-negotiable): a My Event is only visible to (1) the celebrant who created it, or (2) users who were sent an invite AND have accepted. No one else.
+    const applyInvitedAndAcceptedOnly = async (): Promise<void> => {
+      const { data: invites, error: invitesError } = await supabase
+        .from('invites')
+        .select('event_id')
+        .eq('guest_id', dbUserId)
+        .eq('status', 'accepted')
+      if (invitesError) {
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+        return
+      }
+      const acceptedEventIds = invites?.map((inv: { event_id: string }) => inv.event_id).filter(Boolean) || []
+      if (acceptedEventIds.length > 0) {
+        query = query.in('id', acceptedEventIds).eq('is_around_me', false)
       } else {
-        // Default: show events user is invited to OR events they created
-        // First, get event IDs the user is invited to
-        const { data: invites } = await supabase
-          .from('invites')
-          .select('event_id')
-          .eq('guest_id', dbUserId)
-        
-        const invitedEventIds = invites?.map(inv => inv.event_id) || []
-        
-        // Build filter: events user created OR events user is invited to
-        if (invitedEventIds.length > 0) {
-          // Get events created by user
-          const { data: createdEvents } = await supabase
-            .from('events')
-            .select('id')
-            .eq('celebrant_id', dbUserId)
-          
-          // Combine event IDs: created + invited
-          const createdEventIds = createdEvents?.map(e => e.id) || []
-          const allEventIds = [...new Set([...createdEventIds, ...invitedEventIds])]
-          
-          if (allEventIds.length > 0) {
-            query = query.in('id', allEventIds)
-          } else {
-            // If no events found, return empty result by filtering with non-existent ID
-            query = query.eq('id', '00000000-0000-0000-0000-000000000000')
-          }
-        } else {
-          // If no invites, only show events created by user
-          query = query.eq('celebrant_id', dbUserId)
-        }
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+      }
+    }
+
+    if (role === 'vendor' || role === 'both') {
+      if (aroundMe) {
+        query = query.eq('is_around_me', true)
+      } else if (myEvents) {
+        query = query.eq('celebrant_id', dbUserId).eq('is_around_me', false)
+      } else {
+        await applyInvitedAndAcceptedOnly()
       }
     } else {
-      // Vendors can see all events, but can filter for public ticket sales
-      if (publicOnly || ticketsOnly) {
-        query = query.eq('is_public', true).eq('tickets_enabled', true)
+      if (aroundMe) {
+        // Shows & Parties Around Me only: must have is_around_me = true (superadmin-created public events only)
+        query = query.eq('is_around_me', true).gte('date', new Date().toISOString().split('T')[0])
+      } else if (myEvents) {
+        query = query.eq('celebrant_id', dbUserId).eq('is_around_me', false)
+      } else {
+        await applyInvitedAndAcceptedOnly()
       }
     }
 
-    // Filter by city
-    if (city) {
-      query = query.ilike('city', `%${city}%`)
-    }
-
-    // Filter by category
-    if (category) {
-      query = query.eq('category', category)
-    }
-
-    // Filter by search term (name, description, location)
+    if (city) query = query.ilike('city', `%${city}%`)
+    if (category) query = query.eq('category', category)
     if (search) {
       query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%,city.ilike.%${search}%`)
     }
-
-    // Filter by tickets enabled
-    if (ticketsOnly) {
-      query = query.eq('tickets_enabled', true)
-    }
-
-    // Only show future events for public browsing
-    if (publicOnly || ticketsOnly) {
+    if (aroundMe) {
       query = query.gte('date', new Date().toISOString().split('T')[0])
     }
-
     query = query.order('date', { ascending: true })
 
     const { data: events, error } = await query
@@ -428,27 +277,40 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch events: ' + error.message, 500)
     }
 
-    console.log(`Found ${events?.length || 0} events for user ${dbUserId}`)
-
     // Calculate total BU received from transfers for each event
-    const eventsWithTotals = await Promise.all(
+    let eventsWithTotals = await Promise.all(
       (events || []).map(async (event) => {
         const { data: transfers } = await supabase
           .from('transfers')
           .select('amount')
           .eq('event_id', event.id)
           .eq('status', 'completed')
-
         const totalBU = transfers?.reduce((sum, t) => sum + parseFloat(t.amount.toString()), 0) || 0
-
-        return {
-          ...event,
-          total_bu_received: totalBU,
-        }
+        return { ...event, total_bu_received: totalBU }
       })
     )
 
-    console.log(`Returning ${eventsWithTotals.length} events with totals`)
+    // Shows & Parties Around Me: sort by user location (same city first, then same state, then date)
+    if (aroundMe && eventsWithTotals.length > 0 && (userCity || userState)) {
+      const cityLower = (userCity || '').toLowerCase()
+      const stateLower = (userState || '').toLowerCase()
+      eventsWithTotals = [...eventsWithTotals].sort((a, b) => {
+        const aCity = (a.city || '').toLowerCase()
+        const bCity = (b.city || '').toLowerCase()
+        const aState = (a.state || '').toLowerCase()
+        const bState = (b.state || '').toLowerCase()
+        const aCityMatch = cityLower && aCity.includes(cityLower)
+        const bCityMatch = cityLower && bCity.includes(cityLower)
+        const aStateMatch = stateLower && aState.includes(stateLower)
+        const bStateMatch = stateLower && bState.includes(stateLower)
+        if (aCityMatch && !bCityMatch) return -1
+        if (!aCityMatch && bCityMatch) return 1
+        if (aStateMatch && !bStateMatch) return -1
+        if (!aStateMatch && bStateMatch) return 1
+        return (a.date || '').localeCompare(b.date || '')
+      })
+    }
+
     return successResponse({ events: eventsWithTotals })
   } catch (error: any) {
     console.error('=== GET EVENTS ERROR ===')

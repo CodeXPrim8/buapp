@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Ticket, CheckCircle, Search, Filter } from 'lucide-react'
 import { eventsApi, ticketsApi } from '@/lib/api-client'
+import PinVerification from '@/components/pin-verification'
 
 interface Event {
   id: string
@@ -23,7 +24,7 @@ interface Event {
   category?: string
   image_url?: string
   tickets_enabled?: boolean
-  is_public?: boolean
+  is_around_me?: boolean
 }
 
 interface EventsTicketsProps {
@@ -43,6 +44,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   const [ticketQuantity, setTicketQuantity] = useState('1')
   const [showCheckout, setShowCheckout] = useState(false)
   const [purchasing, setPurchasing] = useState(false)
+  const [showPinModal, setShowPinModal] = useState(false)
 
   // Fetch events from API
   useEffect(() => {
@@ -71,17 +73,18 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   const fetchEvents = async () => {
     try {
       setLoading(true)
+      const userState = typeof window !== 'undefined' ? localStorage.getItem('user_state') || '' : ''
       const response = await eventsApi.list({
-        public: true,
-        tickets_only: true,
+        around_me: true,
+        user_city: userCity || undefined,
+        user_state: userState || undefined,
         city: cityFilter || undefined,
         category: categoryFilter || undefined,
         search: searchQuery || undefined,
       })
-      
       if (response.success && response.data?.events) {
         const publicEvents = response.data.events
-          .filter((e: any) => e.is_public && e.tickets_enabled && e.ticket_price_bu > 0)
+          .filter((e: any) => e.is_around_me && (e.ticket_price_bu ?? 0) >= 0)
           .map((e: any) => {
             const ticketsAvailable = e.max_tickets 
               ? e.max_tickets - (e.tickets_sold || 0)
@@ -103,7 +106,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
               category: e.category,
               image_url: e.image_url,
               tickets_enabled: e.tickets_enabled,
-              is_public: e.is_public,
+              is_around_me: e.is_around_me,
             }
           })
         
@@ -189,7 +192,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
     setShowCheckout(true)
   }
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (!selectedEvent || !ticketQuantity || isNaN(Number(ticketQuantity)) || Number(ticketQuantity) < 1) {
       alert('Please enter a valid quantity')
       return
@@ -203,16 +206,24 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
       return
     }
 
+    setShowPinModal(true)
+  }
+
+  const handlePinVerify = async (pin: string) => {
+    if (!selectedEvent) return
+    const quantity = Number(ticketQuantity) || 1
+
     try {
       setPurchasing(true)
-      const response = await ticketsApi.purchase(selectedEvent.id, quantity)
+      const response = await ticketsApi.purchase(selectedEvent.id, quantity, pin)
 
       if (response.success && response.data?.ticket) {
-        alert(`Successfully purchased ${quantity} ticket(s) for ${selectedEvent.name}!`)
+        setShowPinModal(false)
+        const message = response.data?.message || `Transaction successful. Payment deducted from your ɃU balance. You purchased ${quantity} ticket(s) for ${selectedEvent.name}.`
+        alert(message)
         setShowCheckout(false)
         setSelectedEvent(null)
         setTicketQuantity('1')
-        // Refresh events to update availability
         fetchEvents()
       } else {
         alert(response.error || 'Failed to purchase tickets')
@@ -295,7 +306,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                   <span className="text-primary">Ƀ{total.toLocaleString()}</span>
                 </div>
                 <div className="text-xs text-muted-foreground pt-1">
-                  ≈ ₦{total.toLocaleString()} (1 ɃU = ₦1)
+                  Billed in BU · Payment deducted from your ɃU balance
                 </div>
               </div>
 
@@ -308,6 +319,15 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
               </Button>
             </div>
           </Card>
+
+          {showPinModal && (
+            <PinVerification
+              title="Enter PIN"
+              description="Enter your 6-digit PIN to complete the purchase"
+              onVerify={handlePinVerify}
+              onCancel={() => setShowPinModal(false)}
+            />
+          )}
         </div>
       </div>
     )
@@ -316,7 +336,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   return (
     <div className="space-y-6 pb-24 pt-4">
       <div className="px-4">
-        <h2 className="text-xl font-bold mb-4">Events Around Me</h2>
+        <h2 className="text-xl font-bold mb-4">Shows & Parties Around Me</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Browse and search for events and celebrations around you
         </p>
@@ -452,9 +472,9 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
                       Ƀ{event.ticket_price_bu?.toLocaleString() || '0'}
                     </span>
                   </div>
-                  {event.ticket_price_bu && (
+                  {event.ticket_price_bu != null && (
                     <p className="text-xs text-muted-foreground">
-                      ≈ ₦{event.ticket_price_bu.toLocaleString()} per ticket
+                      Billed in BU (ɃU)
                     </p>
                   )}
                   {event.category && (

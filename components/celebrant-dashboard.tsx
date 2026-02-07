@@ -241,7 +241,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
             className="h-20 flex-col gap-2"
           >
             <Calendar className="h-5 w-5" />
-            <span>My Events</span>
+            <span>My Event</span>
           </Button>
         </div>
         <Button
@@ -261,7 +261,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
       {/* Active Events */}
       <div className="px-4" ref={eventsSectionRef}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">My Events</h3>
+          <h3 className="text-lg font-bold">My Event</h3>
           <Button
             onClick={() => onNavigate?.('celebrant-create-event')}
             variant="outline"

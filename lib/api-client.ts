@@ -434,16 +434,25 @@ export const eventsApi = {
     gateway_id?: string
     max_guests?: number
     strictly_by_invitation?: boolean
+    city?: string
+    state?: string
+    country?: string
+    category?: string
+    description?: string
+    ticket_price_bu?: number
+    max_tickets?: number
+    is_around_me?: boolean
   }) => api.post('/events', data, true),
 
-  list: (params?: { city?: string; category?: string; search?: string; public?: boolean; tickets_only?: boolean; my_events?: boolean }) => {
+  list: (params?: { city?: string; category?: string; search?: string; around_me?: boolean; my_events?: boolean; user_city?: string; user_state?: string }) => {
     const queryParams = new URLSearchParams()
     if (params?.city) queryParams.append('city', params.city)
     if (params?.category) queryParams.append('category', params.category)
     if (params?.search) queryParams.append('search', params.search)
-    if (params?.public) queryParams.append('public', 'true')
-    if (params?.tickets_only) queryParams.append('tickets_only', 'true')
+    if (params?.around_me) queryParams.append('around_me', 'true')
     if (params?.my_events) queryParams.append('my_events', 'true')
+    if (params?.user_city) queryParams.append('user_city', params.user_city)
+    if (params?.user_state) queryParams.append('user_state', params.user_state)
     const queryString = queryParams.toString()
     return api.get(`/events${queryString ? `?${queryString}` : ''}`, true)
   },
@@ -459,8 +468,8 @@ export const eventsApi = {
 
 // Tickets API
 export const ticketsApi = {
-  purchase: (eventId: string, quantity: number) => 
-    api.post('/tickets/purchase', { event_id: eventId, quantity }, true),
+  purchase: (eventId: string, quantity: number, pin: string) =>
+    api.post('/tickets/purchase', { event_id: eventId, quantity, pin }, true),
   
   list: (type?: 'purchased' | 'upcoming') => {
     const params = new URLSearchParams()

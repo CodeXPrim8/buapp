@@ -13,7 +13,8 @@ import {
   Wallet, 
   Settings,
   LogOut,
-  QrCode
+  QrCode,
+  MapPin
 } from 'lucide-react'
 
 export default function DashboardLayout({
@@ -92,6 +93,7 @@ export default function DashboardLayout({
     { href: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
     { href: '/dashboard/users', icon: Users, label: 'Users' },
     { href: '/dashboard/events', icon: Calendar, label: 'Events' },
+    { href: '/dashboard/events-around-me', icon: MapPin, label: 'Create Shows & Parties Around Me' },
     { href: '/dashboard/transactions', icon: ArrowLeftRight, label: 'Transactions' },
     { href: '/dashboard/withdrawals', icon: Wallet, label: 'Withdrawals' },
     { href: '/dashboard/payments', icon: CreditCard, label: 'Payments' },

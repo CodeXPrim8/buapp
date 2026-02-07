@@ -29,6 +29,7 @@ import VendorCreateEvent from '@/components/vendor-create-event'
 import CelebrantSendInvites from '@/components/celebrant-send-invites'
 import VendorGatewaySetup from '@/components/vendor-gateway-setup'
 import VendorBuyback from '@/components/vendor-buyback'
+import CreateEventsAroundMe from '@/components/create-events-around-me'
 import Auth from '@/components/auth'
 
 export default function Home() {
@@ -132,9 +133,10 @@ export default function Home() {
     
     // Guest and Celebrant modes are accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' registered roles
     if (mode === 'user') {
-      // Guest mode accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' roles
       if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
-        return ['wallet', 'spraying', 'redemption', 'buy-bu', 'history', 'invites', 'events', 'event-info', 'send-bu', 'receive-bu', 'contacts', 'paystack-payment'].includes(page)
+        const pages = ['wallet', 'spraying', 'redemption', 'buy-bu', 'history', 'invites', 'events', 'event-info', 'send-bu', 'receive-bu', 'contacts', 'paystack-payment']
+        if (currentUser?.role === 'superadmin') pages.push('create-events-around-me')
+        return pages.includes(page)
       }
       return false
     } else if (mode === 'celebrant') {
@@ -199,7 +201,7 @@ export default function Home() {
           )}
           {currentPage === 'dashboard' && <div />}
           <h1 className="text-lg font-bold capitalize text-primary">
-            {currentPage === 'dashboard' && mode === 'user' ? 'Celebrate' : currentPage === 'dashboard' && mode === 'celebrant' ? 'Celebrant' : currentPage === 'dashboard' && mode === 'vendor' ? 'Vendor' : currentPage}
+            {currentPage === 'dashboard' && mode === 'user' ? 'Celebrate' : currentPage === 'dashboard' && mode === 'celebrant' ? 'Celebrant' : currentPage === 'dashboard' && mode === 'vendor' ? 'Vendor' : currentPage === 'events' ? 'Shows & Parties Around Me' : currentPage === 'event-info' ? 'Event' : currentPage === 'create-events-around-me' ? 'Create Shows & Parties Around Me' : currentPage}
           </h1>
           <ThemeSelector theme={theme} onThemeChange={setTheme} />
         </div>
@@ -228,6 +230,7 @@ export default function Home() {
               {currentPage === 'invites' && <Invites />}
               {currentPage === 'events' && <EventsTickets onNavigate={handleNavigate} initialData={pageData} />}
               {currentPage === 'event-info' && <EventInfo eventId={pageData} onNavigate={handleNavigate} />}
+              {currentPage === 'create-events-around-me' && <CreateEventsAroundMe onNavigate={handleNavigate} />}
               {currentPage === 'send-bu' && <SendBU />}
               {currentPage === 'receive-bu' && <ReceiveBU />}
               {currentPage === 'contacts' && <Contacts onNavigate={handleNavigate} initialData={pageData} />}

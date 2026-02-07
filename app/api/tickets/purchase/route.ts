@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
+import { verifyPin } from '@/lib/auth'
 
 // Purchase tickets for an event
 export async function POST(request: NextRequest) {
@@ -49,10 +50,40 @@ async function processTicketPurchase(
   authUser: { userId: string; role: string }
 ) {
   const body = await request.json()
-  const { event_id, quantity } = body
+  const { event_id, quantity, pin } = body
 
   if (!event_id || !quantity || quantity < 1) {
     return errorResponse('Event ID and quantity (minimum 1) are required', 400)
+  }
+
+  if (typeof pin !== 'string' || pin.length !== 6) {
+    return errorResponse('PIN is required (6 digits)', 400)
+  }
+
+  // Verify PIN before processing
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('pin_hash')
+    .eq('id', buyerId)
+    .single()
+
+  if (userError || !user) {
+    console.error('User lookup error:', userError)
+    return errorResponse('User not found', 404)
+  }
+
+  if (!user.pin_hash) {
+    return errorResponse('PIN verification failed. Please contact support.', 500)
+  }
+
+  try {
+    const pinValid = await verifyPin(pin, user.pin_hash)
+    if (!pinValid) {
+      return errorResponse('Invalid PIN. Please check and try again.', 401)
+    }
+  } catch (pinError: any) {
+    console.error('PIN verification error:', pinError)
+    return errorResponse('PIN verification failed. Please try again.', 500)
   }
 
   // Get event details
@@ -95,10 +126,31 @@ async function processTicketPurchase(
 
   const totalPrice = parseFloat((event.ticket_price_bu * quantity).toFixed(2))
 
+  // Resolve super admin user (ticket revenue goes to super admin wallet)
+  const superAdminIdFromEnv = process.env.SUPER_ADMIN_USER_ID?.trim()
+  let superAdminId: string | null = null
+  if (superAdminIdFromEnv) {
+    const { data: u } = await supabase.from('users').select('id').eq('id', superAdminIdFromEnv).single()
+    if (u) superAdminId = u.id
+  }
+  if (!superAdminId) {
+    const { data: superAdmin } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'superadmin')
+      .limit(1)
+      .maybeSingle()
+    superAdminId = superAdmin?.id ?? null
+  }
+  if (!superAdminId) {
+    console.error('Super admin user not found (no SUPER_ADMIN_USER_ID env or user with role=superadmin)')
+    return errorResponse('Ticket payment recipient not configured. Please contact support.', 500)
+  }
+
   // Get buyer's wallet balance
   const { data: wallet, error: walletError } = await supabase
     .from('wallets')
-    .select('balance')
+    .select('balance, naira_balance')
     .eq('user_id', buyerId)
     .single()
 
@@ -106,25 +158,97 @@ async function processTicketPurchase(
     return errorResponse('Wallet not found. Please contact support.', 404)
   }
 
-  const balance = parseFloat(wallet.balance || '0')
+  const buyerBalance = parseFloat(wallet.balance || '0')
+  const buyerNaira = parseFloat(wallet.naira_balance || '0')
 
-  if (balance < totalPrice) {
+  if (buyerBalance < totalPrice) {
     return errorResponse(
-      `Insufficient balance. You have Ƀ${balance.toLocaleString()}, but need Ƀ${totalPrice.toLocaleString()}`,
+      `Insufficient balance. You have Ƀ${buyerBalance.toLocaleString()}, but need Ƀ${totalPrice.toLocaleString()}`,
       400
     )
   }
 
-  // Start transaction: Create transfer, update wallet, create ticket, update event
-  // Create transfer from buyer to event celebrant
+  // 1. Deduct from buyer's wallet (balance + naira_balance for consistency with transfers)
+  const buyerNewBalance = parseFloat((buyerBalance - totalPrice).toFixed(2))
+  const buyerNewNaira = parseFloat((buyerNaira - totalPrice).toFixed(2))
+  const { error: buyerWalletError } = await supabase
+    .from('wallets')
+    .update({
+      balance: buyerNewBalance.toString(),
+      naira_balance: buyerNewNaira.toString(),
+    })
+    .eq('user_id', buyerId)
+
+  if (buyerWalletError) {
+    console.error('Buyer wallet update error:', buyerWalletError)
+    return errorResponse('Failed to deduct from your wallet. Please try again.', 500)
+  }
+
+  // 2. Credit super admin wallet (get or create, then add)
+  let { data: superAdminWallet } = await supabase
+    .from('wallets')
+    .select('balance, naira_balance')
+    .eq('user_id', superAdminId)
+    .single()
+
+  if (!superAdminWallet) {
+    const { data: newWallet, error: createErr } = await supabase
+      .from('wallets')
+      .insert({
+        user_id: superAdminId,
+        balance: '0',
+        naira_balance: '0',
+      })
+      .select()
+      .single()
+    if (createErr || !newWallet) {
+      // Refund buyer
+      await supabase
+        .from('wallets')
+        .update({
+          balance: buyerBalance.toString(),
+          naira_balance: buyerNaira.toString(),
+        })
+        .eq('user_id', buyerId)
+      return errorResponse('Failed to credit ticket payment. Your balance was not charged.', 500)
+    }
+    superAdminWallet = newWallet
+  }
+
+  const superBalance = parseFloat(superAdminWallet.balance || '0')
+  const superNaira = parseFloat(superAdminWallet.naira_balance || '0')
+  const superNewBalance = parseFloat((superBalance + totalPrice).toFixed(2))
+  const superNewNaira = parseFloat((superNaira + totalPrice).toFixed(2))
+  const { error: superWalletError } = await supabase
+    .from('wallets')
+    .update({
+      balance: superNewBalance.toString(),
+      naira_balance: superNewNaira.toString(),
+    })
+    .eq('user_id', superAdminId)
+
+  if (superWalletError) {
+    console.error('Super admin wallet update error:', superWalletError)
+    // Refund buyer
+    await supabase
+      .from('wallets')
+      .update({
+        balance: buyerBalance.toString(),
+        naira_balance: buyerNaira.toString(),
+      })
+      .eq('user_id', buyerId)
+    return errorResponse('Failed to process payment. Your balance was not charged.', 500)
+  }
+
+  // 3. Create transfer record (buyer -> super admin)
   const { data: transfer, error: transferError } = await supabase
     .from('transfers')
     .insert({
       sender_id: buyerId,
-      receiver_id: event.celebrant_id,
+      receiver_id: superAdminId,
       event_id: event_id,
       amount: totalPrice,
-      type: 'transfer', // Use 'transfer' type as it's allowed in schema
+      type: 'transfer',
       status: 'completed',
       source: 'direct',
       message: `Ticket purchase: ${quantity} ticket(s) for ${event.name}`,
@@ -134,43 +258,22 @@ async function processTicketPurchase(
 
   if (transferError || !transfer) {
     console.error('Transfer creation error:', transferError)
-    return errorResponse('Failed to process payment: ' + transferError?.message, 500)
-  }
-
-  // Update buyer's wallet (deduct)
-  const { error: buyerWalletError } = await supabase
-    .from('wallets')
-    .update({ balance: (balance - totalPrice).toFixed(2) })
-    .eq('user_id', buyerId)
-
-  if (buyerWalletError) {
-    console.error('Buyer wallet update error:', buyerWalletError)
-    // Try to rollback transfer
-    await supabase.from('transfers').delete().eq('id', transfer.id)
-    return errorResponse('Failed to deduct from wallet', 500)
-  }
-
-  // Update celebrant's wallet (add)
-  const { data: celebrantWallet } = await supabase
-    .from('wallets')
-    .select('balance')
-    .eq('user_id', event.celebrant_id)
-    .single()
-
-  if (celebrantWallet) {
-    const celebrantBalance = parseFloat(celebrantWallet.balance || '0')
+    // Refund buyer and reverse super admin credit
     await supabase
       .from('wallets')
-      .update({ balance: (celebrantBalance + totalPrice).toFixed(2) })
-      .eq('user_id', event.celebrant_id)
-  } else {
-    // Create wallet if doesn't exist
-    await supabase
-      .from('wallets')
-      .insert({
-        user_id: event.celebrant_id,
-        balance: totalPrice.toFixed(2),
+      .update({
+        balance: buyerBalance.toString(),
+        naira_balance: buyerNaira.toString(),
       })
+      .eq('user_id', buyerId)
+    await supabase
+      .from('wallets')
+      .update({
+        balance: superBalance.toString(),
+        naira_balance: superNaira.toString(),
+      })
+      .eq('user_id', superAdminId)
+    return errorResponse('Failed to record payment: ' + (transferError?.message || 'Unknown error'), 500)
   }
 
   // Create ticket record
@@ -202,8 +305,21 @@ async function processTicketPurchase(
 
   if (ticketError || !ticket) {
     console.error('Ticket creation error:', ticketError)
-    // Rollback: refund buyer, remove transfer
-    await supabase.from('wallets').update({ balance: balance.toFixed(2) }).eq('user_id', buyerId)
+    // Rollback: refund buyer, reverse super admin credit, remove transfer
+    await supabase
+      .from('wallets')
+      .update({
+        balance: buyerBalance.toString(),
+        naira_balance: buyerNaira.toString(),
+      })
+      .eq('user_id', buyerId)
+    await supabase
+      .from('wallets')
+      .update({
+        balance: superBalance.toString(),
+        naira_balance: superNaira.toString(),
+      })
+      .eq('user_id', superAdminId)
     await supabase.from('transfers').delete().eq('id', transfer.id)
     return errorResponse('Failed to create ticket: ' + ticketError?.message, 500)
   }
@@ -252,6 +368,7 @@ async function processTicketPurchase(
     },
   })
 
+  const successMessage = `Transaction successful. Ƀ${totalPrice.toLocaleString()} deducted from your balance. You purchased ${quantity} ticket(s) for ${event.name}.`
   return successResponse({
     ticket: {
       ...ticket,
@@ -261,6 +378,6 @@ async function processTicketPurchase(
       },
     },
     transfer: transfer,
-    message: `Successfully purchased ${quantity} ticket(s)`,
+    message: successMessage,
   }, 201)
 }

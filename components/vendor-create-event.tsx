@@ -28,7 +28,6 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
     tickets_enabled: false,
     ticket_price_bu: '',
     max_tickets: '',
-    is_public: true,
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -59,7 +58,7 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
           return
         }
         if (!formData.city) {
-          alert('City is required for public ticket sales')
+          alert('City is required when tickets are enabled')
           setIsSubmitting(false)
           return
         }
@@ -77,7 +76,6 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
         description: formData.description || undefined,
         image_url: formData.image_url || undefined,
         tickets_enabled: formData.tickets_enabled,
-        is_public: formData.is_public,
       }
 
       if (formData.tickets_enabled) {
@@ -114,7 +112,6 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
           tickets_enabled: false,
           ticket_price_bu: '',
           max_tickets: '',
-          is_public: true,
         })
 
         if (onNavigate) {
@@ -293,19 +290,6 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
 
               {formData.tickets_enabled && (
                 <>
-                  <div className="flex items-center gap-2 pt-2 border-t border-border">
-                    <input
-                      type="checkbox"
-                      id="is_public"
-                      checked={formData.is_public}
-                      onChange={(e) => handleChange('is_public', e.target.checked)}
-                      className="h-4 w-4 rounded border-border"
-                    />
-                    <label htmlFor="is_public" className="text-sm font-semibold cursor-pointer">
-                      Make event public (visible to all users)
-                    </label>
-                  </div>
-
                   <div>
                     <label className="text-sm font-semibold mb-2 block">
                       Ticket Price (ɃU) *
@@ -345,7 +329,7 @@ export default function VendorCreateEvent({ onNavigate, onEventCreated }: Vendor
                   {!formData.city && (
                     <div className="rounded-lg border border-yellow-400/30 bg-yellow-400/10 p-3">
                       <p className="text-xs text-yellow-400">
-                        ⚠️ City is required for public ticket sales. Users will see events in their city.
+                        ⚠️ City is required when ticket sales are enabled.
                       </p>
                     </div>
                   )}

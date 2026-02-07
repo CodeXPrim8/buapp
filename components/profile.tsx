@@ -372,6 +372,9 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
               title: 'Request PND',
               desc: 'Post no debit restriction',
             },
+            ...(userData?.role === 'superadmin'
+              ? [{ icon: '📍', title: 'Create Shows & Parties Around Me', desc: 'Create events visible to all users (super admin only)', action: 'create-events-around-me' as const }]
+              : []),
           ].map((item, idx) => (
             <button
               key={idx}

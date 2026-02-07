@@ -38,7 +38,7 @@ export default function VendorGatewaySetup({ onNavigate, onGatewayCreated }: Ven
         setLoadingEvents(true)
         try {
           // Fetch all events (vendors can see events to link to)
-          const response = await eventsApi.list()
+          const response = await eventsApi.list({ my_events: true }) // Vendor sees only their own events for linking gateways
           if (response.success && response.data?.events) {
             // Transform events with celebrant info
             const eventsWithCelebrants = response.data.events.map((event: any) => ({

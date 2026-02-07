@@ -19,7 +19,8 @@ import {
   Activity,
   BarChart3,
   RefreshCw,
-  ChevronRight
+  ChevronRight,
+  MapPin
 } from 'lucide-react'
 
 interface DashboardStats {
@@ -261,6 +262,16 @@ export default function DashboardPage() {
       gradient: 'from-orange-500 to-orange-600',
       bgGradient: 'from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-800/20',
       borderColor: 'border-orange-200/50 dark:border-orange-800/50'
+    },
+    {
+      title: 'Create Shows & Parties Around Me',
+      description: 'Create Shows & Parties Around Me visible to all BU app users (super admin only)',
+      icon: MapPin,
+      href: '/dashboard/events-around-me',
+      color: 'teal',
+      gradient: 'from-teal-500 to-teal-600',
+      bgGradient: 'from-teal-50 to-teal-100/50 dark:from-teal-900/20 dark:to-teal-800/20',
+      borderColor: 'border-teal-200/50 dark:border-teal-800/50'
     },
     {
       title: 'Payment History',

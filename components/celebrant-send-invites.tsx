@@ -46,8 +46,8 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         setLoading(true)
         setLoadingEvents(true)
         
-        // Fetch events
-        const eventsResponse = await eventsApi.list()
+        // Fetch events - only events created by this celebrant
+        const eventsResponse = await eventsApi.list({ my_events: true })
         if (eventsResponse.success && eventsResponse.data?.events) {
           const formattedEvents = eventsResponse.data.events.map((e: any) => ({
             id: e.id,
