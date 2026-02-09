@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { QrCode, Download, Share2, Copy, CheckCircle } from 'lucide-react'
 import { transferApi, userApi } from '@/lib/api-client'
 import { ReceiptModal } from '@/components/receipt-modal'
+import BULoading from '@/components/bu-loading'
 
 interface ReceivedTransfer {
   id: string
@@ -248,7 +249,7 @@ export default function ReceiveBU() {
                     </div>
                   ) : (
                     <div className="flex h-64 w-64 items-center justify-center bg-white">
-                      <p className="text-muted-foreground">Loading QR code...</p>
+                      <BULoading />
                     </div>
                   )}
                 </div>

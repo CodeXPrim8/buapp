@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody, getAuthUser } from '@/lib/api-helpers'
 import { withCSRFProtection } from '@/lib/api-middleware'
+import { sendPushToUser } from '@/lib/push'
 
 // Top up wallet (in production, this would integrate with payment gateway)
 export const POST = withCSRFProtection(async function POST(request: NextRequest) {
@@ -66,6 +67,22 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       console.error('Failed to create transfer record:', transferError)
       // Don't fail the request, just log the error
     }
+
+    const topupMessage = `Your wallet was topped up with ₦${amount.toLocaleString()}.`
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      type: 'transfer_received',
+      title: 'Wallet Top-up',
+      message: topupMessage,
+      amount: amount,
+      metadata: { source: 'manual_topup' },
+    })
+
+    void sendPushToUser(userId, {
+      title: 'Wallet Top-up',
+      body: topupMessage,
+      data: { url: '/?page=notifications' },
+    })
 
     return successResponse({
       wallet: updatedWallet,

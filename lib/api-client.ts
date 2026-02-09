@@ -1,7 +1,12 @@
 // API Client Utility
 // Centralized API calls with error handling and auth management
 
-const API_BASE = '/api'
+function getApiBase(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/api`
+  }
+  return '/api'
+}
 
 interface ApiOptions extends RequestInit {
   requireAuth?: boolean
@@ -54,7 +59,7 @@ export async function apiCall<T = any>(
     // Try to get CSRF token by calling getMe directly (which sets CSRF token)
     // Use direct fetch, not apiCall, to avoid recursion
     try {
-      const refreshResponse = await fetch(`${API_BASE}/users/me`, {
+      const refreshResponse = await fetch(`${getApiBase()}/users/me`, {
         method: 'GET',
         credentials: 'include',
         headers: {
@@ -93,10 +98,14 @@ export async function apiCall<T = any>(
   // The server will verify JWT from httpOnly cookie
 
   try {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const fetchInit: RequestInit = {
       ...fetchOptions,
       headers: requestHeaders,
-    })
+    }
+    if (method === 'GET' && (endpoint === '/wallets/me' || endpoint.startsWith('/wallets/me?'))) {
+      fetchInit.cache = 'no-store'
+    }
+    const response = await fetch(`${getApiBase()}${endpoint}`, fetchInit)
 
     // Read response text once (can only be read once)
     let responseText = ''
@@ -387,9 +396,9 @@ export const transferApi = {
   get: (id: string) => api.get(`/transfers/${id}`, true),
 }
 
-// Wallet API
+// Wallet API (cache-bust so balance is always fresh, bank-style)
 export const walletApi = {
-  getMe: () => api.get('/wallets/me', true),
+  getMe: () => api.get(`/wallets/me?_=${typeof Date.now === 'function' ? Date.now() : ''}`, true),
   
   getTransactions: (limit?: number, offset?: number) => {
     const params = new URLSearchParams()

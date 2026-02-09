@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,6 +9,7 @@ import PinVerification from '@/components/pin-verification'
 import { transferApi, userApi, contactsApi, friendRequestsApi } from '@/lib/api-client'
 import { AlertPopup } from '@/components/ui/alert-popup'
 import { ReceiptModal } from '@/components/receipt-modal'
+import BULoading from '@/components/bu-loading'
 
 interface UserProfile {
   username: string
@@ -25,6 +26,80 @@ interface BUTransfer {
   date: string
   status: 'completed' | 'pending' | 'failed'
   type: 'transfer' | 'tip'
+}
+
+function AllContactsList({
+  contactsLoading,
+  allContacts,
+  searchQuery,
+  onSelectUser,
+}: {
+  contactsLoading: boolean
+  allContacts: Array<{ id: string; phone_number: string; name: string }>
+  searchQuery: string
+  onSelectUser: (user: UserProfile & { id?: string }) => void
+}) {
+  const q = searchQuery.trim().toLowerCase()
+  const toShow = q.length < 2
+    ? allContacts
+    : allContacts.filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.phone_number && c.phone_number.replace(/\s/g, '').includes(q.replace(/\s/g, '')))
+      )
+  if (contactsLoading) {
+    return (
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-2">All my contacts</h3>
+        <Card className="border-border/50 bg-card/50 p-6 text-center">
+          <BULoading />
+        </Card>
+      </div>
+    )
+  }
+  return (
+    <div className="mb-4">
+      <h3 className="text-sm font-semibold text-foreground mb-2">All my contacts</h3>
+      {toShow.length === 0 && allContacts.length === 0 ? (
+        <Card className="border-border/50 bg-card/50 p-4">
+          <p className="text-sm text-muted-foreground text-center">No contacts yet. Add people via friend requests or enter a phone number below.</p>
+        </Card>
+      ) : toShow.length === 0 ? (
+        <Card className="border-border/50 bg-card/50 p-4">
+          <p className="text-sm text-muted-foreground text-center">No contacts match your search.</p>
+        </Card>
+      ) : (
+        <div className="space-y-2 max-h-48 overflow-y-auto">
+          {toShow.map((contact) => (
+            <Card
+              key={contact.id}
+              onClick={() =>
+                onSelectUser({
+                  username: contact.phone_number,
+                  fullName: contact.name,
+                  verified: true,
+                  id: contact.id,
+                } as UserProfile & { id: string })
+              }
+              className="border-primary/20 cursor-pointer bg-card p-3 transition hover:bg-card/80 hover:border-primary/40"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium">{contact.name}</p>
+                    <p className="text-xs text-muted-foreground">{contact.phone_number}</p>
+                  </div>
+                </div>
+                <span className="text-xs text-primary">Select</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function SendBU() {
@@ -55,6 +130,8 @@ export default function SendBU() {
   const [lastTransferId, setLastTransferId] = useState<string | null>(null)
   const [selectedReceipt, setSelectedReceipt] = useState<any>(null)
   const [showReceipt, setShowReceipt] = useState(false)
+  const [allContacts, setAllContacts] = useState<Array<{ id: string; phone_number: string; name: string }>>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
   const [alertPopup, setAlertPopup] = useState<{ open: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({
     open: false,
     title: '',
@@ -98,6 +175,33 @@ export default function SendBU() {
 
     fetchTransfers()
   }, [])
+
+  // Fetch all contacts when on search step (Send BU to User)
+  useEffect(() => {
+    if (step !== 'search') return
+    const fetchContacts = async () => {
+      try {
+        setContactsLoading(true)
+        const response = await contactsApi.list()
+        if (response.success && response.data?.contacts) {
+          const list = response.data.contacts.map((c: any) => ({
+            id: c.id,
+            phone_number: c.phone_number || '',
+            name: (c.name || `${c.first_name || ''} ${c.last_name || ''}`.trim()) || 'Unknown',
+          }))
+          setAllContacts(list)
+        } else {
+          setAllContacts([])
+        }
+      } catch (e) {
+        console.error('Failed to fetch contacts:', e)
+        setAllContacts([])
+      } finally {
+        setContactsLoading(false)
+      }
+    }
+    fetchContacts()
+  }, [step])
 
   // Search contacts via API
   const handleSearch = async (query: string) => {
@@ -289,6 +393,8 @@ export default function SendBU() {
             const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
             if (typeof window !== 'undefined') {
               sessionStorage.setItem('cached_balance', newBalance.toString())
+              sessionStorage.setItem('balance_updated_at', Date.now().toString())
+              window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
             }
           }
         } catch (error) {
@@ -663,6 +769,14 @@ export default function SendBU() {
               </p>
             </Card>
 
+            {/* All my contacts - show when not searching (or filter by search) */}
+            <AllContactsList
+              contactsLoading={contactsLoading}
+              allContacts={allContacts}
+              searchQuery={searchQuery}
+              onSelectUser={handleSelectUser}
+            />
+
             {/* Divider */}
             <div className="flex items-center gap-4 px-4 mb-4">
               <div className="flex-1 border-t border-border"></div>
@@ -670,13 +784,14 @@ export default function SendBU() {
               <div className="flex-1 border-t border-border"></div>
             </div>
 
-            {/* Manual Phone Input */}
+            {/* Enter unique phone number */}
             <Card className="border-primary/20 bg-card p-4 mb-4">
+              <h3 className="text-sm font-semibold text-foreground mb-2">Enter phone number</h3>
               <div className="flex items-center gap-3">
                 <User className="h-5 w-5 text-primary" />
                 <Input
                   type="tel"
-                  placeholder="Phone number (e.g., +2348012345678)"
+                  placeholder="e.g. +2348012345678"
                   value={manualPhone}
                   onChange={(e) => handleManualPhoneLookup(e.target.value)}
                   inputMode="tel"
@@ -718,7 +833,7 @@ export default function SendBU() {
               <div className="space-y-2">
                 {searchLoading ? (
                   <Card className="border-border/50 bg-card/50 p-8 text-center">
-                    <p className="text-muted-foreground">Searching...</p>
+                    <BULoading />
                   </Card>
                 ) : searchResults.length === 0 ? (
                   <Card className="border-border/50 bg-card/50 p-8 text-center">
@@ -1054,7 +1169,7 @@ export default function SendBU() {
             <div className="space-y-3">
               {transfersLoading ? (
                 <Card className="border-border/50 bg-card/50 p-8 text-center">
-                  <p className="text-muted-foreground">Loading transfers...</p>
+                  <BULoading />
                 </Card>
               ) : transfers.length === 0 ? (
                 <Card className="border-border/50 bg-card/50 p-8 text-center">

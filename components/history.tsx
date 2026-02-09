@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowUp, Filter } from 'lucide-react'
 import { walletApi, transferApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Transaction {
   id: string
@@ -113,7 +114,7 @@ export default function History() {
         <div className="space-y-3">
           {loading ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">Loading transactions...</p>
+              <BULoading />
             </Card>
           ) : filteredTransactions.length === 0 ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">

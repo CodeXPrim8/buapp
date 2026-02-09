@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
+import { sendPushToUser } from '@/lib/push'
 import { withCSRFProtection } from '@/lib/api-middleware'
 
 // Create invites (POST) - Celebrant sends invites to guests
@@ -290,6 +291,14 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       console.error('Failed to create notifications:', notificationError)
       // Don't fail the request if notifications fail - invites were created successfully
     }
+
+    notifications.forEach((notification) => {
+      void sendPushToUser(notification.user_id, {
+        title: notification.title,
+        body: notification.message,
+        data: { url: '/?page=notifications' },
+      })
+    })
 
     return successResponse({
       invites: createdInvites,

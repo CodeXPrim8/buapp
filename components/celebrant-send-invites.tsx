@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CheckCircle, UserPlus, Search, Phone } from 'lucide-react'
 import { userApi, invitesApi, eventsApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Contact {
   phoneNumber: string
@@ -410,7 +411,7 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         <div className="space-y-2 mb-4">
           {loading ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">Loading registered users...</p>
+              <BULoading />
             </Card>
           ) : filteredContacts.length === 0 ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">

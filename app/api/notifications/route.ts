@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
+import { sendPushToUser } from '@/lib/push'
 
 // Get notifications for user
 export async function GET(request: NextRequest) {
@@ -21,9 +22,10 @@ export async function GET(request: NextRequest) {
       return errorResponse('Failed to fetch notifications', 500)
     }
 
-    const unreadCount = notifications.filter(n => !n.read).length
+    const list = Array.isArray(notifications) ? notifications : []
+    const unreadCount = list.filter((n: { read?: boolean }) => !n.read).length
 
-    return successResponse({ notifications, unreadCount })
+    return successResponse({ notifications: list, unreadCount })
   } catch (error: any) {
     console.error('Get notifications error:', error)
     return errorResponse(error.message || 'Internal server error', 500)
@@ -58,6 +60,12 @@ export async function POST(request: NextRequest) {
     if (error || !notification) {
       return errorResponse('Failed to create notification', 500)
     }
+
+    void sendPushToUser(notification.user_id, {
+      title: notification.title,
+      body: notification.message,
+      data: { url: '/?page=notifications', notificationId: notification.id },
+    })
 
     return successResponse({ notification }, 201)
   } catch (error: any) {

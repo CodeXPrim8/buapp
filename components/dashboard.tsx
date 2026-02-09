@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Bell, Settings, Eye, EyeOff } from 'lucide-react'
 import { userApi, walletApi, invitesApi, eventsApi, notificationApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface DashboardProps {
   onNavigate: (page: string, data?: any) => void
@@ -28,6 +29,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   useEffect(() => {
+    // #region agent log
+    const cachedOnMount = typeof window !== 'undefined' ? sessionStorage.getItem('cached_balance') : null
+    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard.tsx:useEffect-mount',message:'Dashboard mounted',data:{cachedOnMount},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
     // Get time-based greeting
     const getGreeting = () => {
       const hour = new Date().getHours()
@@ -61,13 +66,22 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           setUserName(firstName)
         }
 
-        // Get wallet balance
+        // Get wallet balance; after getMe() re-check: if recent purchase cache exists, prefer it (getMe() can be stale)
         const walletResponse = await walletApi.getMe()
         if (walletResponse.success && walletResponse.data?.wallet) {
           const wallet = walletResponse.data.wallet
-          const newBalance = parseFloat(wallet.balance || '0')
+          let newBalance = parseFloat(wallet.balance || '0')
+          const balanceUpdatedAt = typeof window !== 'undefined' ? sessionStorage.getItem('balance_updated_at') : null
+          const cached = typeof window !== 'undefined' ? sessionStorage.getItem('cached_balance') : null
+          const cachedNum = cached != null && cached !== '' ? parseFloat(cached) : NaN
+          const recentPurchase = balanceUpdatedAt && (Date.now() - parseInt(balanceUpdatedAt, 10)) < 30000
+          if (recentPurchase && Number.isFinite(cachedNum)) newBalance = cachedNum
+          // #region agent log
+          if (typeof window !== 'undefined') {
+            fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'dashboard:fetchData:balance', message: 'balance set', data: { newBalance, fromCache: recentPurchase && Number.isFinite(cachedNum), getMeBalance: parseFloat(wallet.balance || '0') }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {})
+          }
+          // #endregion
           setBalance(newBalance)
-          // Cache balance for faster loading on next visit
           if (typeof window !== 'undefined') {
             sessionStorage.setItem('cached_balance', newBalance.toString())
           }
@@ -104,12 +118,20 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             status: inv.status === 'accepted' ? 'Accepted' : inv.status === 'declined' ? 'Declined' : 'Pending',
           }))
           setInvites(recentInvites)
-          console.log('Loaded invites for dashboard:', recentInvites)
         } else {
-          console.error('Failed to fetch invites:', response.error)
+          // Don't log auth errors (session may not be ready or expired)
+          const isAuthError = response.error && /authentication required|unauthorized|401/i.test(String(response.error))
+          if (!isAuthError) {
+            console.error('Failed to fetch invites:', response.error)
+          }
+          setInvites([])
         }
-      } catch (error) {
-        console.error('Failed to fetch invites:', error)
+      } catch (error: any) {
+        const isAuthError = error?.status === 401 || (error?.message && /authentication required|unauthorized/i.test(String(error.message)))
+        if (!isAuthError) {
+          console.error('Failed to fetch invites:', error)
+        }
+        setInvites([])
       } finally {
         setInvitesLoading(false)
       }
@@ -136,9 +158,19 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 : 'Available',
             }))
           setEvents(upcomingEvents)
+        } else {
+          const isAuthError = response.error && /authentication required|unauthorized|401/i.test(String(response.error))
+          if (!isAuthError) {
+            console.error('Failed to fetch events:', response.error)
+          }
+          setEvents([])
         }
-      } catch (error) {
-        console.error('Failed to fetch events:', error)
+      } catch (error: any) {
+        const isAuthError = error?.status === 401 || (error?.message && /authentication required|unauthorized/i.test(String(error.message)))
+        if (!isAuthError) {
+          console.error('Failed to fetch events:', error)
+        }
+        setEvents([])
       } finally {
         setEventsLoading(false)
       }
@@ -148,11 +180,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       try {
         const response = await notificationApi.list()
         if (response.success && response.data) {
-          const unreadCount = response.data.unreadCount || 0
+          const unreadCount = response.data.unreadCount ?? 0
           setUnreadNotifications(unreadCount)
+        } else if (response.error && /failed to fetch|network/i.test(String(response.error).toLowerCase())) {
+          setUnreadNotifications(0)
         }
-      } catch (error) {
-        console.error('Failed to fetch notifications:', error)
+      } catch (error: any) {
+        const isAuthError = error?.status === 401 || (error?.message && /authentication required|unauthorized/i.test(String(error.message)))
+        if (!isAuthError) {
+          setUnreadNotifications(0)
+        }
       }
     }
 
@@ -172,7 +209,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           try {
             const walletResponse = await walletApi.getMe()
             if (walletResponse.success && walletResponse.data?.wallet) {
-              const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+              let newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+              const balanceUpdatedAt = typeof window !== 'undefined' ? sessionStorage.getItem('balance_updated_at') : null
+              const cached = typeof window !== 'undefined' ? sessionStorage.getItem('cached_balance') : null
+              const cachedNum = cached != null && cached !== '' ? parseFloat(cached) : NaN
+              const recentPurchase = balanceUpdatedAt && (Date.now() - parseInt(balanceUpdatedAt, 10)) < 30000
+              if (recentPurchase && Number.isFinite(cachedNum)) newBalance = cachedNum
               setBalance(newBalance)
               if (typeof window !== 'undefined') {
                 sessionStorage.setItem('cached_balance', newBalance.toString())
@@ -202,12 +244,28 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
     window.addEventListener('notifications-updated', handleNotificationUpdate)
 
+    // When balance is updated (e.g. after ticket purchase), sync state so UI reflects deduction
+    const handleBalanceUpdated = (e: CustomEvent<{ balance?: string }>) => {
+      const val = e.detail?.balance ?? sessionStorage.getItem('cached_balance')
+      if (val != null) {
+        const num = parseFloat(val)
+        if (!isNaN(num)) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard.tsx:balance-updated',message:'setBalance from balance-updated event',data:{num,val},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          setBalance(num)
+        }
+      }
+    }
+    window.addEventListener('balance-updated', handleBalanceUpdated as EventListener)
+
     // Cleanup interval on unmount
     return () => {
       clearInterval(greetingInterval)
       clearInterval(notificationInterval)
       window.removeEventListener('storage', handleStorageChange)
       window.removeEventListener('notifications-updated', handleNotificationUpdate)
+      window.removeEventListener('balance-updated', handleBalanceUpdated as EventListener)
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
@@ -250,7 +308,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="flex items-center justify-between">
             <div className="text-3xl font-bold">
               {loading && balance === null ? (
-                <span className="text-lg">Loading...</span>
+                <BULoading size="compact" className="py-1" />
               ) : balanceVisible ? (
                 `Ƀ ${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               ) : (
@@ -271,7 +329,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="flex items-center justify-between text-sm">
             <span className="font-mono">
               {loading && balance === null ? (
-                <span>Loading...</span>
+                <BULoading size="compact" className="py-1" />
               ) : balanceVisible ? (
                 `≈ ₦${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               ) : (
@@ -341,7 +399,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <div className="space-y-3">
           {invitesLoading ? (
             <div className="rounded-xl bg-card p-3 text-center">
-              <p className="text-sm text-muted-foreground">Loading invites...</p>
+              <BULoading className="py-2" />
             </div>
           ) : invites.length === 0 ? (
             <div className="rounded-xl bg-card p-3 text-center">
@@ -402,7 +460,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <div className="space-y-3">
           {eventsLoading ? (
             <div className="rounded-xl bg-card p-3 text-center">
-              <p className="text-sm text-muted-foreground">Loading events...</p>
+              <BULoading className="py-2" />
             </div>
           ) : events.length === 0 ? (
             <div className="rounded-xl bg-card p-3 text-center">

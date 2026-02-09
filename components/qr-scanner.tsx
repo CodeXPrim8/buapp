@@ -41,11 +41,16 @@ export default function QRScanner({ mode: userMode = 'user' }: QRScannerProps) {
   const [mode, setMode] = useState<'menu' | 'scanning' | 'history' | 'invite-scanning'>('menu')
   const [scanType, setScanType] = useState<'transfer' | 'invite'>('transfer')
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
+  const [cameraError, setCameraError] = useState('')
   const [validations, setValidations] = useState<(TransferValidation | InviteValidation)[]>([])
   const [manualInput, setManualInput] = useState('')
   const [scanResult, setScanResult] = useState<TransferValidation | InviteValidation | null>(null)
   const [isVendor, setIsVendor] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const detectorRef = useRef<any>(null)
+  const scanningRef = useRef(false)
 
   useEffect(() => {
     // Check if user is vendor via API
@@ -63,13 +68,80 @@ export default function QRScanner({ mode: userMode = 'user' }: QRScannerProps) {
     checkVendorStatus()
   }, [])
 
-  const startCamera = () => {
-    setCameraActive(true)
-    // Simulated camera activation
-  }
+  useEffect(() => {
+    return () => stopCamera()
+  }, [])
 
   const stopCamera = () => {
+    scanningRef.current = false
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
     setCameraActive(false)
+  }
+
+  const handleDetectedValue = (value: string) => {
+    if (!value) return
+    if (scanType === 'invite') {
+      validateInvite(value)
+    } else {
+      validateTransfer(value)
+    }
+    stopCamera()
+  }
+
+  const scanLoop = async () => {
+    if (!scanningRef.current || !videoRef.current || !detectorRef.current) return
+    try {
+      const detections = await detectorRef.current.detect(videoRef.current)
+      if (detections && detections.length > 0) {
+        const value = detections[0]?.rawValue || detections[0]?.data || ''
+        if (value) {
+          handleDetectedValue(String(value))
+          return
+        }
+      }
+    } catch (error) {
+      // Ignore scan errors and keep looping
+    }
+    if (scanningRef.current) {
+      requestAnimationFrame(scanLoop)
+    }
+  }
+
+  const startCamera = async () => {
+    setCameraError('')
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera is not supported on this device.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+      })
+      streamRef.current = stream
+      setCameraPermission('granted')
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCameraActive(true)
+
+      if ('BarcodeDetector' in window) {
+        detectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
+        scanningRef.current = true
+        requestAnimationFrame(scanLoop)
+      } else {
+        setCameraError('QR scanning is not supported on this device. Use manual entry below.')
+      }
+    } catch (error: any) {
+      setCameraPermission('denied')
+      setCameraError(error?.message || 'Unable to access camera. Please allow camera permission.')
+    }
   }
 
   const validateTransfer = async (transferId: string) => {
@@ -384,6 +456,28 @@ export default function QRScanner({ mode: userMode = 'user' }: QRScannerProps) {
           <h2 className="text-xl font-bold">
             {scanType === 'invite' ? 'Validate Invite' : 'Validate ɃU Transfer'}
           </h2>
+
+          {!cameraActive && (
+            <Card className="border-primary/20 bg-card p-4">
+              <p className="text-sm text-muted-foreground">
+                Allow camera access to scan QR codes. You can still use manual entry below.
+              </p>
+              {cameraError && (
+                <p className="mt-2 text-xs text-red-500">{cameraError}</p>
+              )}
+              {cameraPermission === 'denied' && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Camera permission is blocked. Please enable it in your browser settings.
+                </p>
+              )}
+              <Button
+                onClick={startCamera}
+                className="mt-3 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Enable Camera
+              </Button>
+            </Card>
+          )}
 
           {/* Camera Preview */}
           {cameraActive && (

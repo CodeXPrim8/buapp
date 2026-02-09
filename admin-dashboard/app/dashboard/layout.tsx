@@ -16,6 +16,7 @@ import {
   QrCode,
   MapPin
 } from 'lucide-react'
+import BULoading from '@/components/bu-loading'
 
 export default function DashboardLayout({
   children,
@@ -68,11 +69,7 @@ export default function DashboardLayout({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-slate-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Loading dashboard...</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Checking authentication</p>
-        </div>
+        <BULoading />
       </div>
     )
   }
@@ -81,10 +78,7 @@ export default function DashboardLayout({
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-slate-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">Redirecting to login...</p>
-        </div>
+        <BULoading />
       </div>
     )
   }

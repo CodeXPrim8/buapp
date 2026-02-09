@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get('search') || ''
+    const aroundMe = searchParams.get('around_me') === 'true'
     const limit = parseInt(searchParams.get('limit') || '100')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       query = query.ilike('name', `%${search}%`)
+    }
+    if (aroundMe) {
+      query = query.eq('is_around_me', true)
     }
 
     const { data: events, error } = await query
@@ -51,6 +55,14 @@ export async function GET(request: NextRequest) {
           name: event.name,
           date: event.date,
           location: event.location,
+          city: event.city,
+          state: event.state,
+          is_around_me: event.is_around_me,
+          max_tickets: event.max_tickets,
+          tickets_sold: event.tickets_sold ?? 0,
+          ticket_price_bu: event.ticket_price_bu,
+          category: event.category,
+          description: event.description,
           celebrant: event.celebrant ? {
             id: event.celebrant.id,
             name: `${event.celebrant.first_name} ${event.celebrant.last_name}`,
@@ -66,6 +78,7 @@ export async function GET(request: NextRequest) {
     // Get total count
     let countQuery = supabase.from('events').select('*', { count: 'exact', head: true })
     if (search) countQuery = countQuery.ilike('name', `%${search}%`)
+    if (aroundMe) countQuery = countQuery.eq('is_around_me', true)
     const { count } = await countQuery
 
     return successResponse({

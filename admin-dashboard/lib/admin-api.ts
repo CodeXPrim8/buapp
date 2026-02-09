@@ -91,15 +91,19 @@ export const adminApi = {
     }),
 
   // Events
-  getEvents: (params?: { search?: string; limit?: number; offset?: number }) => {
+  getEvents: (params?: { search?: string; around_me?: boolean; limit?: number; offset?: number }) => {
     const queryParams = new URLSearchParams()
     if (params?.search) queryParams.append('search', params.search)
+    if (params?.around_me) queryParams.append('around_me', 'true')
     if (params?.limit) queryParams.append('limit', params.limit.toString())
     if (params?.offset) queryParams.append('offset', params.offset.toString())
     return apiCall(`/admin/events?${queryParams.toString()}`)
   },
 
   getEvent: (id: string) => apiCall(`/admin/events/${id}`),
+
+  updateEvent: (id: string, data: { name?: string; date?: string; location?: string; city?: string; state?: string; category?: string; description?: string; ticket_price_bu?: number; max_tickets?: number | null }) =>
+    apiCall(`/admin/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Transactions
   getTransactions: (params?: { type?: string; status?: string; limit?: number; offset?: number; startDate?: string; endDate?: string }) => {

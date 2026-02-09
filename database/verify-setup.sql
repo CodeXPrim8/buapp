@@ -13,7 +13,8 @@ WHERE table_schema = 'public'
     'transfers', 
     'vendor_pending_sales', 
     'notifications', 
-    'withdrawals'
+    'withdrawals',
+    'push_subscriptions'
   )
 ORDER BY table_name;
 
@@ -25,7 +26,7 @@ SELECT
   is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name IN ('users', 'wallets', 'gateways', 'events', 'transfers')
+  AND table_name IN ('users', 'wallets', 'gateways', 'events', 'transfers', 'push_subscriptions')
 ORDER BY table_name, ordinal_position;
 
 -- Check indexes
@@ -34,7 +35,7 @@ SELECT
   indexname
 FROM pg_indexes
 WHERE schemaname = 'public'
-  AND tablename IN ('users', 'wallets', 'gateways', 'events', 'transfers')
+  AND tablename IN ('users', 'wallets', 'gateways', 'events', 'transfers', 'push_subscriptions')
 ORDER BY tablename, indexname;
 
 -- Check RLS policies

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
-import { Bell, CheckCircle, ArrowDown, ArrowUp, Sparkles, X, UserPlus, UserCheck } from 'lucide-react'
+import { Bell, CheckCircle, ArrowDown, ArrowUp, Sparkles, X, UserPlus, UserCheck, AlertCircle } from 'lucide-react'
 import { notificationApi, transferApi } from '@/lib/api-client'
 import { ReceiptModal } from '@/components/receipt-modal'
 
 interface Notification {
   id: string
-  type: 'transfer_received' | 'transfer_sent' | 'event_invite' | 'ticket_purchased' | 'withdrawal_completed' | 'friend_request' | 'friend_request_accepted'
+  type: 'transfer_received' | 'transfer_sent' | 'event_invite' | 'ticket_purchased' | 'withdrawal_completed' | 'withdrawal_requested' | 'friend_request' | 'friend_request_accepted'
   title: string
   message: string
   amount?: number
@@ -161,6 +161,8 @@ export default function Notifications({ onNavigate }: NotificationsProps = {}) {
         return <CheckCircle className="h-5 w-5 text-blue-400" />
       case 'withdrawal_completed':
         return <CheckCircle className="h-5 w-5 text-green-400" />
+      case 'withdrawal_requested':
+        return <AlertCircle className="h-5 w-5 text-orange-400" />
       case 'friend_request':
         return <UserPlus className="h-5 w-5 text-primary" />
       case 'friend_request_accepted':

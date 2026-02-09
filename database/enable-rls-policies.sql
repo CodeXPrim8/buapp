@@ -15,6 +15,7 @@ ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Users table policies
 -- Users can only view/update their own record
@@ -104,6 +105,13 @@ CREATE POLICY "Users can view own notifications"
 CREATE POLICY "Users can update own notifications"
   ON notifications FOR UPDATE
   USING (auth.uid()::text = user_id::text);
+
+-- Push subscriptions policies
+-- Users can manage their own push subscriptions
+CREATE POLICY "Users can manage own push subscriptions"
+  ON push_subscriptions FOR ALL
+  USING (auth.uid()::text = user_id::text)
+  WITH CHECK (auth.uid()::text = user_id::text);
 
 -- Withdrawals table policies
 -- Users can only view their own withdrawal requests

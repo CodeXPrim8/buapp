@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BU balance after ticket purchase – troubleshoot</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1rem; background: #1a1a1a; color: #e0e0e0; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    .sub { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    section { margin-bottom: 2rem; }
+    h2 { font-size: 1rem; color: #4ade80; margin-bottom: 0.75rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { border: 1px solid #333; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #2a2a2a; color: #aaa; }
+    tr.pass { background: rgba(74, 222, 128, 0.1); }
+    tr.fail { background: rgba(248, 113, 113, 0.15); }
+    code { background: #333; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
+    .result { font-weight: 600; }
+    .result.ok { color: #4ade80; }
+    .result.bad { color: #f87171; }
+    button { background: #3b82f6; color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+    button:hover { background: #2563eb; }
+    pre { background: #222; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; }
+    .log { margin-top: 0.5rem; }
+    .step { color: #94a3b8; margin: 0.25rem 0; }
+  </style>
+</head>
+<body>
+  <h1>BU balance after ticket purchase – troubleshoot</h1>
+  <p class="sub">This page tests the client-side logic that sets the new balance after a ticket purchase. It simulates different API response shapes to see if the correct balance is used.</p>
+
+  <section>
+    <h2>1. Logic simulation (same as events-tickets.tsx)</h2>
+    <p>For each simulated purchase response, we compute whether we <strong>use API balance</strong> or fall back to getMe(). If we fall back and getMe() returned the <em>old</em> balance, the UI would show the initial balance again.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th><code>response.data.new_balance</code></th>
+          <th><code>typeof</code></th>
+          <th>Parsed number</th>
+          <th>Use API balance?</th>
+          <th>Balance set (simulated)</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody id="sim-table"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>2. Run simulation</h2>
+    <button type="button" id="run-sim">Run simulation</button>
+    <div id="sim-log" class="log"></div>
+  </section>
+
+  <section>
+    <h2>3. Live check (when app is running)</h2>
+    <p>If your Next.js app is running (e.g. <code>http://localhost:3000</code>), you can:</p>
+    <ul>
+      <li>Open DevTools → Network, buy a ticket with BU, then inspect the <strong>tickets/purchase</strong> response and check <code>data.new_balance</code> (type and value).</li>
+      <li>Or add <code>?debugBalance=1</code> to the app URL and check console for logged purchase response (see instructions in app code).</li>
+    </ul>
+    <p>Base URL: <input type="text" id="baseUrl" value="" placeholder="e.g. http://localhost:3000" style="width: 280px; padding: 0.35rem; background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; border-radius: 4px;" /></p>
+    <button type="button" id="check-wallet">GET /api/wallets/me (see response shape)</button>
+    <pre id="live-result"></pre>
+  </section>
+
+  <section>
+    <h2>4. Fixes applied (if still broken, check below)</h2>
+    <ul>
+      <li><strong>Purchase flow:</strong> After a ticket purchase, the app sets <code>cached_balance</code> and <code>balance_updated_at</code> (timestamp). <code>new_balance</code> is accepted as number or string.</li>
+      <li><strong>Dashboard/Wallet:</strong> For 8 seconds after <code>balance_updated_at</code>, refetch (getMe) does <em>not</em> overwrite balance — the cached value from the purchase response is used. So the new balance should stick when you navigate back.</li>
+      <li><strong>wallets/me:</strong> User is resolved the same way as the purchase route (JWT userId, then fallback to phone from header or JWT) so the same wallet is returned.</li>
+    </ul>
+  </section>
+  <section>
+    <h2>5. If still broken</h2>
+    <ul>
+      <li>If <strong>Use API balance? = No</strong> for the real response: ensure API returns <code>new_balance</code> (number or string).</li>
+      <li>If balance still reverts after 8s: something else overwrites it; check <code>sessionStorage.getItem('cached_balance')</code> and <code>balance_updated_at</code> in DevTools after purchase.</li>
+      <li>Check console for <code>[BU balance troubleshoot]</code> when buying with <code>?debugBalance=1</code>.</li>
+    </ul>
+  </section>
+
+  <script>
+    // Exact logic from events-tickets.tsx (after fix)
+    function simulateBalanceUpdate(responseData, totalDeducted) {
+      const raw = responseData?.new_balance
+      const newBalanceNum = typeof raw === 'number' && Number.isFinite(raw) ? raw : parseFloat(String(raw ?? ''))
+      const useApiBalance = Number.isFinite(newBalanceNum)
+      let balanceSet
+      if (useApiBalance && typeof window !== 'undefined') {
+        balanceSet = newBalanceNum.toFixed(2)
+      } else {
+        // Fallback: in real app this would call getMe() – we simulate stale "initial" balance
+        balanceSet = '(fallback: getMe() – if stale, shows initial balance)'
+      }
+      return {
+        raw,
+        typeofRaw: typeof raw,
+        newBalanceNum: Number.isFinite(newBalanceNum) ? newBalanceNum : null,
+        useApiBalance,
+        balanceSet,
+      }
+    }
+
+    const scenarios = [
+      { name: 'Number (correct)', data: { ticket: {}, new_balance: 95.5 }, initialBalance: 100, totalDeducted: 4.5 },
+      { name: 'String "95.50"', data: { ticket: {}, new_balance: '95.50' }, initialBalance: 100, totalDeducted: 4.5 },
+      { name: 'String "95"', data: { ticket: {}, new_balance: '95' }, initialBalance: 100, totalDeducted: 5 },
+      { name: 'undefined (missing)', data: { ticket: {} }, initialBalance: 100, totalDeducted: 5 },
+      { name: 'null', data: { ticket: {}, new_balance: null }, initialBalance: 100, totalDeducted: 5 },
+      { name: 'Invalid string', data: { ticket: {}, new_balance: 'nope' }, initialBalance: 100, totalDeducted: 5 },
+    ]
+
+    function runSimulation() {
+      const tbody = document.getElementById('sim-table')
+      tbody.innerHTML = ''
+      const logEl = document.getElementById('sim-log')
+      logEl.innerHTML = ''
+
+      scenarios.forEach(({ name, data, initialBalance, totalDeducted }) => {
+        const r = simulateBalanceUpdate(data, totalDeducted)
+        const expectedBalance = (initialBalance - totalDeducted).toFixed(2)
+        const actualOk = r.useApiBalance && r.balanceSet === expectedBalance
+        const fallbackUsed = !r.useApiBalance
+        const verdict = actualOk ? 'OK – API balance used' : (fallbackUsed ? 'FALLBACK – risk of stale balance' : 'Check')
+
+        const tr = document.createElement('tr')
+        tr.className = actualOk ? 'pass' : 'fail'
+        tr.innerHTML = `
+          <td>${name}</td>
+          <td><code>${JSON.stringify(r.raw)}</code></td>
+          <td>${r.typeofRaw}</td>
+          <td>${r.newBalanceNum != null ? r.newBalanceNum : 'NaN'}</td>
+          <td>${r.useApiBalance ? 'Yes' : 'No'}</td>
+          <td>${r.balanceSet}</td>
+          <td class="result ${actualOk ? 'ok' : 'bad'}">${verdict}</td>
+        `
+        tbody.appendChild(tr)
+
+        logEl.innerHTML += `<div class="step">${name}: useApiBalance=${r.useApiBalance}, balanceSet=${r.balanceSet}</div>`
+      })
+    }
+
+    document.getElementById('run-sim').onclick = runSimulation
+    runSimulation()
+
+    document.getElementById('check-wallet').onclick = async () => {
+      const base = document.getElementById('baseUrl').value.trim() || window.location.origin
+      const pre = document.getElementById('live-result')
+      pre.textContent = 'Loading...'
+      try {
+        const res = await fetch(base + '/api/wallets/me', { credentials: 'include' })
+        const json = await res.json()
+        const wallet = json?.data?.wallet
+        const balance = wallet?.balance
+        pre.textContent = JSON.stringify(json, null, 2) + '\n\n---\nbalance type: ' + typeof balance + ', value: ' + JSON.stringify(balance)
+      } catch (e) {
+        pre.textContent = 'Error: ' + e.message + '\n\n(Ensure app is running and base URL is correct; CORS may block if opened as file://)'
+      }
+    }
+  </script>
+</body>
+</html>

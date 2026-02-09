@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { User, UserPlus, UserCheck, UserX, X, Search, Plus, Check, XCircle } from 'lucide-react'
 import { contactsApi, friendRequestsApi } from '@/lib/api-client'
 import { AlertPopup } from '@/components/ui/alert-popup'
+import BULoading from '@/components/bu-loading'
 
 interface Contact {
   id: string
@@ -362,7 +363,7 @@ export default function Contacts({ onNavigate, initialData }: ContactsProps) {
           <div className="px-4 space-y-3">
             {loading ? (
               <Card className="border-border/50 bg-card/50 p-8 text-center">
-                <p className="text-muted-foreground">Loading contacts...</p>
+                <BULoading />
               </Card>
             ) : filteredContacts.length === 0 ? (
               <Card className="border-border/50 bg-card/50 p-8 text-center">

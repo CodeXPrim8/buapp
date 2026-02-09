@@ -5,8 +5,10 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Ticket, CheckCircle, Search, Filter } from 'lucide-react'
-import { eventsApi, ticketsApi } from '@/lib/api-client'
+import { eventsApi, ticketsApi, walletApi } from '@/lib/api-client'
 import PinVerification from '@/components/pin-verification'
+import BULoading from '@/components/bu-loading'
+import { TicketPurchaseReceipt, type TicketPurchaseReceiptData } from '@/components/ticket-purchase-receipt'
 
 interface Event {
   id: string
@@ -45,6 +47,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   const [showCheckout, setShowCheckout] = useState(false)
   const [purchasing, setPurchasing] = useState(false)
   const [showPinModal, setShowPinModal] = useState(false)
+  const [purchaseSuccessReceipt, setPurchaseSuccessReceipt] = useState<TicketPurchaseReceiptData | null>(null)
 
   // Fetch events from API
   useEffect(() => {
@@ -170,16 +173,52 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
     }
   }, [searchQuery, allEvents])
 
-  // Handle initial data (from event-info page)
+  // Handle initial data (from event-info "Buy Tickets"): show ticket purchase (image 2) immediately
   useEffect(() => {
-    if (initialData && initialData.action === 'buy' && initialData.eventId) {
-      const event = allEvents.find(e => e.id === initialData.eventId)
-      if (event) {
-        setSelectedEvent(event)
+    if (!initialData || initialData.action !== 'buy' || !initialData.eventId) return
+    const eventId = initialData.eventId as string
+
+    // Prefer event from list if already loaded
+    const fromList = allEvents.find((e) => e.id === eventId)
+    if (fromList) {
+      setSelectedEvent(fromList)
+      setShowCheckout(true)
+      return
+    }
+
+    // List not ready or event not in list (e.g. filters) — fetch event by ID so checkout shows right away
+    let cancelled = false
+    eventsApi.get(eventId).then((res) => {
+      if (cancelled) return
+      if (res.success && res.data?.event) {
+        const e = res.data.event
+        const ticketsAvailable =
+          e.max_tickets != null ? (e.max_tickets - (e.tickets_sold || 0)) : null
+        setSelectedEvent({
+          id: e.id,
+          name: e.name,
+          date: e.date,
+          location: e.location,
+          city: e.city,
+          state: e.state,
+          country: e.country,
+          ticket_price_bu: parseFloat(e.ticket_price_bu || '0'),
+          max_tickets: e.max_tickets,
+          tickets_sold: e.tickets_sold || 0,
+          ticketsAvailable,
+          description: e.description,
+          category: e.category,
+          image_url: e.image_url,
+          tickets_enabled: e.tickets_enabled,
+          is_around_me: e.is_around_me,
+        })
         setShowCheckout(true)
       }
+    })
+    return () => {
+      cancelled = true
     }
-  }, [initialData, allEvents])
+  }, [initialData, initialData?.eventId, allEvents])
 
   const handleEventClick = (event: Event) => {
     if (onNavigate) {
@@ -212,6 +251,8 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
   const handlePinVerify = async (pin: string) => {
     if (!selectedEvent) return
     const quantity = Number(ticketQuantity) || 1
+    const pricePerTicket = selectedEvent.ticket_price_bu || 0
+    const total = pricePerTicket * quantity
 
     try {
       setPurchasing(true)
@@ -219,11 +260,33 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
 
       if (response.success && response.data?.ticket) {
         setShowPinModal(false)
-        const message = response.data?.message || `Transaction successful. Payment deducted from your ɃU balance. You purchased ${quantity} ticket(s) for ${selectedEvent.name}.`
-        alert(message)
-        setShowCheckout(false)
-        setSelectedEvent(null)
-        setTicketQuantity('1')
+        // Backend returns actual balance from DB as new_balance. Use it; never overwrite with getMe() here.
+        const raw = response.data?.new_balance ?? (response.data as any)?.data?.new_balance
+        const num = typeof raw === 'number' && Number.isFinite(raw) ? raw : parseFloat(String(raw ?? ''))
+        const useNum = Number.isFinite(num) && num >= 0
+        if (typeof window !== 'undefined') {
+          const balanceStr = useNum ? num.toFixed(2) : (() => {
+            const cached = sessionStorage.getItem('cached_balance')
+            const prev = cached ? parseFloat(cached) : 0
+            return Math.max(0, prev - total).toFixed(2)
+          })()
+          sessionStorage.setItem('cached_balance', balanceStr)
+          sessionStorage.setItem('balance_updated_at', Date.now().toString())
+          window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: balanceStr } }))
+        }
+        const now = new Date()
+        const receiptData: TicketPurchaseReceiptData = {
+          eventName: selectedEvent.name,
+          eventDate: selectedEvent.date,
+          eventLocation: selectedEvent.location,
+          quantity,
+          pricePerTicket,
+          total,
+          ticketId: response.data.ticket.id || `tx-${Date.now()}`,
+          purchaseDate: now.toLocaleDateString('en-NG', { dateStyle: 'medium' }),
+          purchaseTime: now.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }),
+        }
+        setPurchaseSuccessReceipt(receiptData)
         fetchEvents()
       } else {
         alert(response.error || 'Failed to purchase tickets')
@@ -234,6 +297,24 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
     } finally {
       setPurchasing(false)
     }
+  }
+
+  const handlePurchaseDone = () => {
+    setPurchaseSuccessReceipt(null)
+    setShowCheckout(false)
+    setSelectedEvent(null)
+    setTicketQuantity('1')
+    fetchEvents()
+  }
+
+  // Success: show "Ticket purchased" with downloadable receipt
+  if (purchaseSuccessReceipt) {
+    return (
+      <TicketPurchaseReceipt
+        receipt={purchaseSuccessReceipt}
+        onDone={handlePurchaseDone}
+      />
+    )
   }
 
   if (showCheckout && selectedEvent) {
@@ -333,6 +414,15 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
     )
   }
 
+  // In buy flow from Event Info: don't show the search/list page — show loading until checkout is ready
+  if (initialData?.action === 'buy' && initialData?.eventId) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center pb-24 pt-4">
+        <BULoading />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 pb-24 pt-4">
       <div className="px-4">
@@ -409,7 +499,7 @@ export default function EventsTickets({ onNavigate, initialData }: EventsTickets
         {/* Events List */}
         {loading ? (
           <Card className="border-border/50 bg-card/50 p-8 text-center">
-            <p className="text-muted-foreground">Loading events...</p>
+            <BULoading />
           </Card>
         ) : events.length === 0 ? (
           <Card className="border-border/50 bg-card/50 p-8 text-center">

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowUp, ArrowDown, Plus } from 'lucide-react'
 import { walletApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Transaction {
   id: string
@@ -46,11 +47,27 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       }
     }
     
+    // When balance is updated (e.g. after ticket purchase), sync state so UI reflects deduction
+    const handleBalanceUpdated = (e: CustomEvent<{ balance?: string }>) => {
+      const val = e.detail?.balance ?? (typeof window !== 'undefined' ? sessionStorage.getItem('cached_balance') : null)
+      if (val != null) {
+        const num = parseFloat(val)
+        if (!isNaN(num)) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'wallet.tsx:balance-updated',message:'setBalance from balance-updated event',data:{num,val},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          setBalance(num)
+        }
+      }
+    }
+    window.addEventListener('balance-updated', handleBalanceUpdated as EventListener)
+    
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', handleVisibilityChange)
     }
     
     return () => {
+      window.removeEventListener('balance-updated', handleBalanceUpdated as EventListener)
       if (typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       }
@@ -60,13 +77,15 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
   const fetchWalletData = async () => {
     try {
       setLoading(true)
-      
-      // Fetch wallet balance
       const walletResponse = await walletApi.getMe()
       if (walletResponse.success && walletResponse.data?.wallet) {
-        const newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+        let newBalance = parseFloat(walletResponse.data.wallet.balance || '0')
+        const balanceUpdatedAt = typeof window !== 'undefined' ? sessionStorage.getItem('balance_updated_at') : null
+        const cached = typeof window !== 'undefined' ? sessionStorage.getItem('cached_balance') : null
+        const cachedNum = cached != null && cached !== '' ? parseFloat(cached) : NaN
+        const recentPurchase = balanceUpdatedAt && (Date.now() - parseInt(balanceUpdatedAt, 10)) < 30000
+        if (recentPurchase && Number.isFinite(cachedNum)) newBalance = cachedNum
         setBalance(newBalance)
-        // Cache balance for faster loading on next visit
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('cached_balance', newBalance.toString())
         }
@@ -119,14 +138,14 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
         <p className="text-sm text-muted-foreground">Total Balance</p>
         <h2 className="mt-2 text-4xl font-bold text-primary">
           {loading && balance === null ? (
-            <span className="text-lg">Loading...</span>
+            <BULoading size="compact" className="py-1" />
           ) : (
             `₦${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           )}
         </h2>
         <p className="mt-4 text-sm">
           <span className="font-semibold">
-            {loading && balance === null ? 'Loading...' : `Ƀ ${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            {loading && balance === null ? '…' : `Ƀ ${(balance || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           </span> Available
         </p>
       </Card>
@@ -195,7 +214,9 @@ export default function Wallet({ onNavigate }: WalletProps = {}) {
       <div>
         <h3 className="mb-4 font-semibold">Transaction History</h3>
         {loading ? (
-          <div className="text-center py-8 text-muted-foreground">Loading transactions...</div>
+          <div className="flex justify-center py-8">
+            <BULoading />
+          </div>
         ) : transactions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">No transactions yet</div>
         ) : (

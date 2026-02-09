@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser, validateBody } from '@/lib/api-helpers'
 import { getUserByPhone } from '@/lib/auth'
+import { sendPushToUser } from '@/lib/push'
 
 // Send friend request
 export async function POST(request: NextRequest) {
@@ -131,13 +132,15 @@ export async function POST(request: NextRequest) {
       // Don't fail the request, but log the error
     } else {
       // Create notification for receiver using verified user ID
+      const notificationTitle = 'New Friend Request'
+      const notificationMessage = `You have a new friend request from ${senderName}`
       const { error: notificationError } = await supabase
         .from('notifications')
         .insert([{
           user_id: receiverUser.id, // Use verified user ID
           type: 'friend_request',
-          title: 'New Friend Request',
-          message: `You have a new friend request from ${senderName}`,
+          title: notificationTitle,
+          message: notificationMessage,
           metadata: { friend_request_id: friendRequest.id, sender_id: authUser.userId },
           read: false,
         }])
@@ -156,6 +159,11 @@ export async function POST(request: NextRequest) {
         // But log it for debugging
       } else {
         console.log('Friend request notification created successfully for user:', receiverUser.id)
+        void sendPushToUser(receiverUser.id, {
+          title: notificationTitle,
+          body: notificationMessage,
+          data: { url: '/?page=notifications' },
+        })
       }
     }
 

@@ -14,6 +14,7 @@ import QRScanner from '@/components/qr-scanner'
 import Navigation from '@/components/navigation'
 import ModeSwitcher from '@/components/mode-switcher'
 import ThemeSelector from '@/components/theme-selector'
+import NotificationBell from '@/components/notification-bell'
 import CelebrantDashboard from '@/components/celebrant-dashboard'
 import BuyBU from '@/components/buy-bu'
 import History from '@/components/history'
@@ -28,8 +29,8 @@ import CelebrantCreateEvent from '@/components/celebrant-create-event'
 import VendorCreateEvent from '@/components/vendor-create-event'
 import CelebrantSendInvites from '@/components/celebrant-send-invites'
 import VendorGatewaySetup from '@/components/vendor-gateway-setup'
+import BULoading from '@/components/bu-loading'
 import VendorBuyback from '@/components/vendor-buyback'
-import CreateEventsAroundMe from '@/components/create-events-around-me'
 import Auth from '@/components/auth'
 
 export default function Home() {
@@ -133,10 +134,9 @@ export default function Home() {
     
     // Guest and Celebrant modes are accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' registered roles
     if (mode === 'user') {
+      // Guest mode accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' roles
       if (currentUser?.role === 'user' || currentUser?.role === 'celebrant' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
-        const pages = ['wallet', 'spraying', 'redemption', 'buy-bu', 'history', 'invites', 'events', 'event-info', 'send-bu', 'receive-bu', 'contacts', 'paystack-payment']
-        if (currentUser?.role === 'superadmin') pages.push('create-events-around-me')
-        return pages.includes(page)
+        return ['wallet', 'spraying', 'redemption', 'buy-bu', 'history', 'invites', 'events', 'event-info', 'send-bu', 'receive-bu', 'contacts', 'paystack-payment'].includes(page)
       }
       return false
     } else if (mode === 'celebrant') {
@@ -172,11 +172,8 @@ export default function Home() {
   // Show loading state instead of null to avoid hydration mismatch
   if (!mounted) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mb-4 text-2xl">ɃU</div>
-          <div className="text-sm text-muted-foreground">Loading...</div>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <BULoading />
       </div>
     )
   }
@@ -201,9 +198,12 @@ export default function Home() {
           )}
           {currentPage === 'dashboard' && <div />}
           <h1 className="text-lg font-bold capitalize text-primary">
-            {currentPage === 'dashboard' && mode === 'user' ? 'Celebrate' : currentPage === 'dashboard' && mode === 'celebrant' ? 'Celebrant' : currentPage === 'dashboard' && mode === 'vendor' ? 'Vendor' : currentPage === 'events' ? 'Shows & Parties Around Me' : currentPage === 'event-info' ? 'Event' : currentPage === 'create-events-around-me' ? 'Create Shows & Parties Around Me' : currentPage}
+            {currentPage === 'dashboard' && mode === 'user' ? 'Celebrate' : currentPage === 'dashboard' && mode === 'celebrant' ? 'Celebrant' : currentPage === 'dashboard' && mode === 'vendor' ? 'Vendor' : currentPage}
           </h1>
-          <ThemeSelector theme={theme} onThemeChange={setTheme} />
+          <div className="flex items-center gap-2">
+            <NotificationBell onNavigate={handleNavigate} />
+            <ThemeSelector theme={theme} onThemeChange={setTheme} />
+          </div>
         </div>
 
         {/* Mode Switcher */}
@@ -230,7 +230,6 @@ export default function Home() {
               {currentPage === 'invites' && <Invites />}
               {currentPage === 'events' && <EventsTickets onNavigate={handleNavigate} initialData={pageData} />}
               {currentPage === 'event-info' && <EventInfo eventId={pageData} onNavigate={handleNavigate} />}
-              {currentPage === 'create-events-around-me' && <CreateEventsAroundMe onNavigate={handleNavigate} />}
               {currentPage === 'send-bu' && <SendBU />}
               {currentPage === 'receive-bu' && <ReceiveBU />}
               {currentPage === 'contacts' && <Contacts onNavigate={handleNavigate} initialData={pageData} />}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, Users, ArrowDown, TrendingUp, UserPlus, CheckCircle, Trash2 } from 'lucide-react'
 import { eventsApi, transferApi } from '@/lib/api-client'
 import { AlertPopup } from '@/components/ui/alert-popup'
+import BULoading from '@/components/bu-loading'
 
 interface Event {
   id: string
@@ -161,8 +162,8 @@ export default function CelebrantEventInfo({ eventId, onNavigate }: CelebrantEve
 
   if (loading) {
     return (
-      <div className="space-y-6 pb-24 pt-4 px-4">
-        <p className="text-muted-foreground">Loading event...</p>
+      <div className="flex min-h-[40vh] items-center justify-center pb-24 pt-4 px-4">
+        <BULoading />
       </div>
     )
   }

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, validateBody } from '@/lib/api-helpers'
 import { verifyPin } from '@/lib/auth'
 import { withCSRFProtection } from '@/lib/api-middleware'
+import { sendPushToUser } from '@/lib/push'
 
 // Create direct transfer between users
 export const POST = withCSRFProtection(async function POST(request: NextRequest) {
@@ -191,24 +192,39 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       .single()
 
     // Notification for receiver
+    const receiverTitle = type === 'tip' ? 'Tip Received' : 'ɃU Received'
+    const receiverMessage = `You received Ƀ ${amount.toLocaleString()} ${type === 'tip' ? 'as a tip' : ''} from ${senderUser ? `${senderUser.first_name} ${senderUser.last_name}` : 'User'}`
     await supabase.from('notifications').insert([{
       user_id: receiver_id,
       type: 'transfer_received',
-      title: type === 'tip' ? 'Tip Received' : 'ɃU Received',
-      message: `You received Ƀ ${amount.toLocaleString()} ${type === 'tip' ? 'as a tip' : ''} from ${senderUser ? `${senderUser.first_name} ${senderUser.last_name}` : 'User'}`,
+      title: receiverTitle,
+      message: receiverMessage,
       amount: amount,
       metadata: { transfer_id: transfer?.id, from_user_name: senderUser ? `${senderUser.first_name} ${senderUser.last_name}` : 'User' },
     }])
 
     // Notification for sender
+    const senderTitle = type === 'tip' ? 'Tip Sent' : 'ɃU Sent'
+    const senderMessage = `You sent Ƀ ${amount.toLocaleString()} ${type === 'tip' ? 'as a tip' : ''} to ${receiverUser ? `${receiverUser.first_name} ${receiverUser.last_name}` : 'User'}`
     await supabase.from('notifications').insert([{
       user_id: senderId,
       type: 'transfer_sent',
-      title: type === 'tip' ? 'Tip Sent' : 'ɃU Sent',
-      message: `You sent Ƀ ${amount.toLocaleString()} ${type === 'tip' ? 'as a tip' : ''} to ${receiverUser ? `${receiverUser.first_name} ${receiverUser.last_name}` : 'User'}`,
+      title: senderTitle,
+      message: senderMessage,
       amount: amount,
       metadata: { transfer_id: transfer?.id, to_user_name: receiverUser ? `${receiverUser.first_name} ${receiverUser.last_name}` : 'User' },
     }])
+
+    void sendPushToUser(receiver_id, {
+      title: receiverTitle,
+      body: receiverMessage,
+      data: { url: '/?page=notifications' },
+    })
+    void sendPushToUser(senderId, {
+      title: senderTitle,
+      body: senderMessage,
+      data: { url: '/?page=notifications' },
+    })
 
     return successResponse({
       transfer,

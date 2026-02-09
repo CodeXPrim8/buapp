@@ -56,7 +56,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.paystack.co https://*.paystack.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline' https://paystack.com https://*.paystack.com; img-src 'self' data: https:; font-src 'self' data: https://*.paystack.com; connect-src 'self' https://*.supabase.co https://api.paystack.co https://*.paystack.com https://vitals.vercel-insights.com; frame-src https://js.paystack.co https://checkout.paystack.com https://*.paystack.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.paystack.co https://*.paystack.com https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline' https://paystack.com https://*.paystack.com; img-src 'self' data: https:; font-src 'self' data: https://*.paystack.com; connect-src 'self' https://*.supabase.co https://api.paystack.co https://*.paystack.com https://vitals.vercel-insights.com; frame-src https://js.paystack.co https://checkout.paystack.com https://*.paystack.com; worker-src 'self'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;",
           },
           {
             key: 'Strict-Transport-Security',
@@ -64,7 +64,7 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'geolocation=(), microphone=(), camera=()',
+            value: 'geolocation=(), microphone=(), camera=(self), notifications=(self), push=(self)',
           },
         ],
       },

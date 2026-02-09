@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, MapPin, Clock, User, CheckCircle, AlertCircle, QrCode, Download, Search, Link2 } from 'lucide-react'
 import { gatewayApi, eventsApi, userApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface VendorGatewaySetupProps {
   onNavigate?: (page: string, data?: any) => void
@@ -332,8 +333,8 @@ export default function VendorGatewaySetup({ onNavigate, onGatewayCreated }: Ven
 
                 {/* Events List */}
                 {loadingEvents ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">Loading events...</p>
+                  <div className="flex justify-center py-8">
+                    <BULoading />
                   </div>
                 ) : filteredEvents.length === 0 ? (
                   <div className="text-center py-8">

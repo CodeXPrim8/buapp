@@ -92,13 +92,26 @@ CREATE TABLE IF NOT EXISTS vendor_pending_sales (
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('transfer_received', 'transfer_sent', 'event_invite', 'ticket_purchased', 'withdrawal_completed')),
+  type TEXT NOT NULL CHECK (type IN ('transfer_received', 'transfer_sent', 'event_invite', 'ticket_purchased', 'withdrawal_completed', 'withdrawal_requested', 'friend_request', 'friend_request_accepted')),
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   amount NUMERIC(15, 2),
   read BOOLEAN DEFAULT FALSE,
   metadata JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Push subscriptions table
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, endpoint)
 );
 
 -- Withdrawals table
@@ -113,6 +126,8 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   account_number TEXT,
   account_name TEXT,
   wallet_address TEXT,
+  funds_locked BOOLEAN DEFAULT FALSE,
+  locked_at TIMESTAMP WITH TIME ZONE,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE
@@ -134,6 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_vendor_sales_status ON vendor_pending_sales(statu
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON withdrawals(user_id);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -160,6 +176,9 @@ CREATE TRIGGER update_events_updated_at BEFORE UPDATE ON events
 CREATE TRIGGER update_vendor_sales_updated_at BEFORE UPDATE ON vendor_pending_sales
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_push_subscriptions_updated_at BEFORE UPDATE ON push_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Row Level Security (RLS) Policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
@@ -169,6 +188,7 @@ ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE vendor_pending_sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Basic RLS policies (users can only see their own data)
 -- Note: You'll need to customize these based on your auth setup
@@ -204,3 +224,8 @@ CREATE POLICY "Users can read own notifications" ON notifications
 -- Users can read their own withdrawals
 CREATE POLICY "Users can read own withdrawals" ON withdrawals
   FOR SELECT USING (auth.uid()::text = user_id::text);
+
+-- Users can manage their own push subscriptions
+CREATE POLICY "Users can manage own push subscriptions" ON push_subscriptions
+  FOR ALL USING (auth.uid()::text = user_id::text)
+  WITH CHECK (auth.uid()::text = user_id::text);

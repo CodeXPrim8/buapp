@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/admin-api'
+import BULoading from '@/components/bu-loading'
 
 export default function GatewaysPage() {
   const [gateways, setGateways] = useState<any[]>([])
@@ -37,7 +38,7 @@ export default function GatewaysPage() {
       {/* Gateways Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          <div className="col-span-full text-center py-12">Loading gateways...</div>
+          <div className="col-span-full flex justify-center py-12"><BULoading /></div>
         ) : gateways.length === 0 ? (
           <div className="col-span-full text-center py-12 text-gray-500">No gateways found</div>
         ) : (

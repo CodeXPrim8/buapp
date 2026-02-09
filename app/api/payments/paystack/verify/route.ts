@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 import { supabase } from '@/lib/supabase'
+import { creditMainBalance } from '@/lib/wallet-balance'
+import { sendPushToUser } from '@/lib/push'
 
 // Verify Paystack payment and credit wallet
 export async function POST(request: NextRequest) {
@@ -81,48 +83,27 @@ export async function POST(request: NextRequest) {
       return errorResponse('Payment verification failed: User mismatch', 403)
     }
 
-    // Get current wallet
-    const { data: wallet, error: walletError } = await supabase
+    // Credit wallet balance using atomic helper
+    const creditResult = await creditMainBalance(supabase, authUser.userId, amountInNaira)
+    console.log('[PAYSTACK VERIFY] Wallet credit result:', {
+      success: creditResult.success,
+      balanceBefore: creditResult.balanceBefore,
+      newBalance: creditResult.newBalance,
+      errorMessage: creditResult.errorMessage,
+    })
+
+    if (!creditResult.success) {
+      return errorResponse(creditResult.errorMessage || 'Failed to update wallet', 500)
+    }
+
+    const { data: updatedWallet, error: walletFetchError } = await supabase
       .from('wallets')
       .select('*')
       .eq('user_id', authUser.userId)
       .single()
-    console.log('[PAYSTACK VERIFY] Wallet fetch:', { 
-      hasWallet: !!wallet, 
-      hasError: !!walletError, 
-      currentBalance: wallet?.balance,
-      userId: authUser.userId 
-    })
 
-    if (walletError) {
-      console.error('[PAYSTACK VERIFY] Wallet fetch error:', walletError)
-      return errorResponse('Wallet not found', 404)
-    }
-
-    // Update wallet balance
-    const oldBalance = parseFloat(wallet.balance)
-    const newBalance = oldBalance + amountInNaira
-    console.log('[PAYSTACK VERIFY] Updating wallet:', { oldBalance, amountInNaira, newBalance })
-    
-    const { data: updatedWallet, error: updateError } = await supabase
-      .from('wallets')
-      .update({
-        balance: newBalance.toString(),
-        naira_balance: (parseFloat(wallet.naira_balance) + amountInNaira).toString(),
-      })
-      .eq('user_id', authUser.userId)
-      .select()
-      .single()
-    console.log('[PAYSTACK VERIFY] Wallet update result:', { 
-      hasUpdatedWallet: !!updatedWallet, 
-      hasError: !!updateError, 
-      updatedBalance: updatedWallet?.balance,
-      errorMessage: updateError?.message 
-    })
-
-    if (updateError) {
-      console.error('[PAYSTACK VERIFY] Wallet update error:', updateError)
-      return errorResponse('Failed to update wallet: ' + updateError.message, 500)
+    if (walletFetchError) {
+      console.error('[PAYSTACK VERIFY] Wallet fetch after credit error:', walletFetchError)
     }
 
     // Create transfer record for the topup
@@ -147,6 +128,22 @@ export async function POST(request: NextRequest) {
       console.error('[PAYSTACK VERIFY] Transfer record creation error:', transferError)
       // Don't fail the request, just log the error
     }
+
+    const topupMessage = `Your wallet was topped up with ₦${amountInNaira.toLocaleString()}.`
+    await supabase.from('notifications').insert({
+      user_id: authUser.userId,
+      type: 'transfer_received',
+      title: 'Wallet Top-up',
+      message: topupMessage,
+      amount: amountInNaira,
+      metadata: { reference },
+    })
+
+    void sendPushToUser(authUser.userId, {
+      title: 'Wallet Top-up',
+      body: topupMessage,
+      data: { url: '/?page=notifications' },
+    })
 
     console.log('[PAYSTACK VERIFY] Verification successful:', { amount: amountInNaira, reference })
     return successResponse({

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
 import { verifyPin } from '@/lib/auth'
+import { debitMainBalance, creditMainBalance } from '@/lib/wallet-balance'
+import { sendPushToUser } from '@/lib/push'
 
 // Purchase tickets for an event
 export async function POST(request: NextRequest) {
@@ -20,6 +22,9 @@ export async function POST(request: NextRequest) {
 
     if (userError || !dbUser) {
       const phoneNumber = request.headers.get('x-user-phone')
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api/tickets/purchase:POST', message: 'user lookup failed, trying phone', data: { authUserId: authUser.userId, hasPhoneHeader: !!phoneNumber }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {})
+      // #endregion
       if (phoneNumber) {
         const { data: userByPhone } = await supabase
           .from('users')
@@ -30,13 +35,16 @@ export async function POST(request: NextRequest) {
         if (!userByPhone) {
           return errorResponse('User not found. Please login again.', 401)
         }
-        
-        // Continue with purchase using userByPhone.id
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api/tickets/purchase:POST', message: 'buyerId from phone', data: { buyerId: userByPhone.id, authUserId: authUser.userId }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {})
+        // #endregion
         return await processTicketPurchase(request, userByPhone.id, authUser)
       }
       return errorResponse('User not found. Please login again.', 401)
     }
-
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api/tickets/purchase:POST', message: 'buyerId from dbUser', data: { buyerId: dbUser.id, authUserId: authUser.userId }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {})
+    // #endregion
     return await processTicketPurchase(request, dbUser.id, authUser)
   } catch (error: any) {
     console.error('Purchase ticket error:', error)
@@ -146,98 +154,31 @@ async function processTicketPurchase(
     console.error('Super admin user not found (no SUPER_ADMIN_USER_ID env or user with role=superadmin)')
     return errorResponse('Ticket payment recipient not configured. Please contact support.', 500)
   }
+  const recipientId = superAdminId
+  const isSelfRecipient = recipientId === buyerId
 
-  // Get buyer's wallet balance
-  const { data: wallet, error: walletError } = await supabase
-    .from('wallets')
-    .select('balance, naira_balance')
-    .eq('user_id', buyerId)
-    .single()
+  // 1. Debit BU from buyer's main balance (atomic: subtracts from balance + naira_balance)
+  const debitResult = await debitMainBalance(supabase, buyerId, totalPrice)
 
-  if (walletError || !wallet) {
-    return errorResponse('Wallet not found. Please contact support.', 404)
+  if (!debitResult.success) {
+    const msg = debitResult.errorMessage === 'Insufficient balance'
+      ? `Insufficient balance. You have Ƀ${(debitResult.balanceBefore ?? 0).toLocaleString()}, but need Ƀ${totalPrice.toLocaleString()}`
+      : debitResult.errorMessage || 'Failed to deduct from your wallet.'
+    return errorResponse(msg, 400)
   }
 
-  const buyerBalance = parseFloat(wallet.balance || '0')
-  const buyerNaira = parseFloat(wallet.naira_balance || '0')
+  const expectedNewBalance = Math.round((debitResult.balanceBefore - totalPrice) * 100) / 100
 
-  if (buyerBalance < totalPrice) {
+  // 2. Credit super admin wallet (atomic: creates wallet if missing, then adds BU)
+  const creditResult = await creditMainBalance(supabase, recipientId, totalPrice)
+
+  if (!creditResult.success) {
+    // Rollback: refund buyer
+    await creditMainBalance(supabase, buyerId, totalPrice)
     return errorResponse(
-      `Insufficient balance. You have Ƀ${buyerBalance.toLocaleString()}, but need Ƀ${totalPrice.toLocaleString()}`,
-      400
+      creditResult.errorMessage || 'Failed to process ticket payment. Your balance was not charged.',
+      500
     )
-  }
-
-  // 1. Deduct from buyer's wallet (balance + naira_balance for consistency with transfers)
-  const buyerNewBalance = parseFloat((buyerBalance - totalPrice).toFixed(2))
-  const buyerNewNaira = parseFloat((buyerNaira - totalPrice).toFixed(2))
-  const { error: buyerWalletError } = await supabase
-    .from('wallets')
-    .update({
-      balance: buyerNewBalance.toString(),
-      naira_balance: buyerNewNaira.toString(),
-    })
-    .eq('user_id', buyerId)
-
-  if (buyerWalletError) {
-    console.error('Buyer wallet update error:', buyerWalletError)
-    return errorResponse('Failed to deduct from your wallet. Please try again.', 500)
-  }
-
-  // 2. Credit super admin wallet (get or create, then add)
-  let { data: superAdminWallet } = await supabase
-    .from('wallets')
-    .select('balance, naira_balance')
-    .eq('user_id', superAdminId)
-    .single()
-
-  if (!superAdminWallet) {
-    const { data: newWallet, error: createErr } = await supabase
-      .from('wallets')
-      .insert({
-        user_id: superAdminId,
-        balance: '0',
-        naira_balance: '0',
-      })
-      .select()
-      .single()
-    if (createErr || !newWallet) {
-      // Refund buyer
-      await supabase
-        .from('wallets')
-        .update({
-          balance: buyerBalance.toString(),
-          naira_balance: buyerNaira.toString(),
-        })
-        .eq('user_id', buyerId)
-      return errorResponse('Failed to credit ticket payment. Your balance was not charged.', 500)
-    }
-    superAdminWallet = newWallet
-  }
-
-  const superBalance = parseFloat(superAdminWallet.balance || '0')
-  const superNaira = parseFloat(superAdminWallet.naira_balance || '0')
-  const superNewBalance = parseFloat((superBalance + totalPrice).toFixed(2))
-  const superNewNaira = parseFloat((superNaira + totalPrice).toFixed(2))
-  const { error: superWalletError } = await supabase
-    .from('wallets')
-    .update({
-      balance: superNewBalance.toString(),
-      naira_balance: superNewNaira.toString(),
-    })
-    .eq('user_id', superAdminId)
-
-  if (superWalletError) {
-    console.error('Super admin wallet update error:', superWalletError)
-    // Refund buyer
-    await supabase
-      .from('wallets')
-      .update({
-        balance: buyerBalance.toString(),
-        naira_balance: buyerNaira.toString(),
-      })
-      .eq('user_id', buyerId)
-    return errorResponse('Failed to process payment. Your balance was not charged.', 500)
   }
 
   // 3. Create transfer record (buyer -> super admin)
@@ -245,7 +186,7 @@ async function processTicketPurchase(
     .from('transfers')
     .insert({
       sender_id: buyerId,
-      receiver_id: superAdminId,
+      receiver_id: recipientId,
       event_id: event_id,
       amount: totalPrice,
       type: 'transfer',
@@ -258,21 +199,9 @@ async function processTicketPurchase(
 
   if (transferError || !transfer) {
     console.error('Transfer creation error:', transferError)
-    // Refund buyer and reverse super admin credit
-    await supabase
-      .from('wallets')
-      .update({
-        balance: buyerBalance.toString(),
-        naira_balance: buyerNaira.toString(),
-      })
-      .eq('user_id', buyerId)
-    await supabase
-      .from('wallets')
-      .update({
-        balance: superBalance.toString(),
-        naira_balance: superNaira.toString(),
-      })
-      .eq('user_id', superAdminId)
+    // Rollback: refund buyer, reverse super admin credit
+    await creditMainBalance(supabase, buyerId, totalPrice)
+    await debitMainBalance(supabase, recipientId, totalPrice)
     return errorResponse('Failed to record payment: ' + (transferError?.message || 'Unknown error'), 500)
   }
 
@@ -306,20 +235,8 @@ async function processTicketPurchase(
   if (ticketError || !ticket) {
     console.error('Ticket creation error:', ticketError)
     // Rollback: refund buyer, reverse super admin credit, remove transfer
-    await supabase
-      .from('wallets')
-      .update({
-        balance: buyerBalance.toString(),
-        naira_balance: buyerNaira.toString(),
-      })
-      .eq('user_id', buyerId)
-    await supabase
-      .from('wallets')
-      .update({
-        balance: superBalance.toString(),
-        naira_balance: superNaira.toString(),
-      })
-      .eq('user_id', superAdminId)
+    await creditMainBalance(supabase, buyerId, totalPrice)
+    await debitMainBalance(supabase, recipientId, totalPrice)
     await supabase.from('transfers').delete().eq('id', transfer.id)
     return errorResponse('Failed to create ticket: ' + ticketError?.message, 500)
   }
@@ -356,11 +273,13 @@ async function processTicketPurchase(
     .eq('id', buyerId)
     .single()
 
+  const buyerNotificationMessage = `You successfully purchased ${quantity} ticket(s) for ${event.name}`
   await supabase.from('notifications').insert({
     user_id: buyerId,
     type: 'ticket_purchased',
     title: 'Tickets Purchased',
-    message: `You successfully purchased ${quantity} ticket(s) for ${event.name}`,
+    message: buyerNotificationMessage,
+    amount: totalPrice,
     metadata: {
       event_id: event_id,
       ticket_id: ticket.id,
@@ -368,7 +287,43 @@ async function processTicketPurchase(
     },
   })
 
-  const successMessage = `Transaction successful. Ƀ${totalPrice.toLocaleString()} deducted from your balance. You purchased ${quantity} ticket(s) for ${event.name}.`
+  void sendPushToUser(buyerId, {
+    title: 'Tickets Purchased',
+    body: buyerNotificationMessage,
+    data: { url: '/?page=notifications' },
+  })
+
+  if (recipientId !== buyerId) {
+    const buyerName = buyer ? `${buyer.first_name} ${buyer.last_name}` : 'A user'
+    const recipientMessage = `${buyerName} bought ${quantity} ticket(s) for ${event.name}.`
+    await supabase.from('notifications').insert({
+      user_id: recipientId,
+      type: 'transfer_received',
+      title: 'Ticket Purchase',
+      message: recipientMessage,
+      amount: totalPrice,
+      metadata: {
+        transfer_id: transfer.id,
+        event_id: event_id,
+        from_user_name: buyerName,
+      },
+    })
+    void sendPushToUser(recipientId, {
+      title: 'Ticket Purchase',
+      body: recipientMessage,
+      data: { url: '/?page=notifications' },
+    })
+  }
+
+  // Use computed post-debit balance; post-SELECT can be stale (replica/connection). Logs showed SELECT returned pre-debit value.
+  const newBalanceForClient = isSelfRecipient ? debitResult.balanceBefore : expectedNewBalance
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/5302d33a-07c7-4c7f-8d80-24b4192edc7b', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'api/tickets/purchase:response', message: 'new_balance returned (computed)', data: { buyerId, newBalanceForClient, balanceBefore: debitResult.balanceBefore, totalPrice, runId: 'post-fix' }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {})
+  // #endregion
+
+  const successMessage = isSelfRecipient
+    ? `Transaction successful. You purchased ${quantity} ticket(s) for ${event.name}.`
+    : `Transaction successful. Ƀ${totalPrice.toLocaleString()} deducted from your balance. You purchased ${quantity} ticket(s) for ${event.name}.`
   return successResponse({
     ticket: {
       ...ticket,
@@ -379,5 +334,6 @@ async function processTicketPurchase(
     },
     transfer: transfer,
     message: successMessage,
+    new_balance: newBalanceForClient,
   }, 201)
 }

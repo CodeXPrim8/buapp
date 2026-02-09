@@ -23,7 +23,7 @@ export async function setAuthCookie(token: string, response?: NextResponse): Pro
       cookieStore.set(TOKEN_COOKIE_NAME, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax',
         maxAge: COOKIE_MAX_AGE,
         path: '/',
       })
@@ -56,9 +56,14 @@ export async function getAuthCookie(request?: NextRequest): Promise<string | nul
 }
 
 // Delete authentication cookie (server-side)
-export async function deleteAuthCookie() {
+export async function deleteAuthCookie(response?: NextResponse): Promise<NextResponse> {
+  if (response) {
+    response.cookies.delete(TOKEN_COOKIE_NAME)
+    return response
+  }
   const cookieStore = await cookies()
   cookieStore.delete(TOKEN_COOKIE_NAME)
+  return response || NextResponse.next()
 }
 
 // Client-side cookie helpers

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, Banknote, TrendingUp, Calendar, Plus, Bell } from 'lucide-react'
 import { eventsApi, walletApi, transferApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Event {
   id: string
@@ -84,6 +85,8 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
           // Cache balance for faster loading on next visit
           if (typeof window !== 'undefined') {
             sessionStorage.setItem('cached_balance', newBalance.toString())
+            sessionStorage.setItem('balance_updated_at', Date.now().toString())
+            window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
           }
         }
 
@@ -147,6 +150,8 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
               setMainBalance(newBalance)
               if (typeof window !== 'undefined') {
                 sessionStorage.setItem('cached_balance', newBalance.toString())
+                sessionStorage.setItem('balance_updated_at', Date.now().toString())
+                window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
               }
             }
           } catch (error) {
@@ -199,7 +204,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
           <div className="flex items-center justify-between">
             <div className="text-3xl font-bold">
               {mainBalance === null ? (
-                <span className="text-lg">Loading...</span>
+                <BULoading size="compact" className="py-1" />
               ) : (
                 `Ƀ ${mainBalance.toLocaleString()}`
               )}
@@ -210,7 +215,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
           </div>
           <div className="text-sm opacity-90">
             {mainBalance === null ? (
-              <span>Loading...</span>
+              <BULoading size="compact" className="py-1" />
             ) : (
               `≈ ₦${mainBalance.toLocaleString()}`
             )}

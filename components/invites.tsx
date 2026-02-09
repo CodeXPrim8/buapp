@@ -153,7 +153,7 @@ export default function Invites() {
         <div className="space-y-3">
           {loading ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">
-              <p className="text-muted-foreground">Loading invites...</p>
+              <BULoading />
             </Card>
           ) : invites.length === 0 ? (
             <Card className="border-border/50 bg-card/50 p-8 text-center">

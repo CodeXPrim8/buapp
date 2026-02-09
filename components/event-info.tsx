@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, Ticket, Users, Clock, QrCode } from 'lucide-react'
 import { eventsApi, invitesApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Event {
   id: string
@@ -122,8 +123,8 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
 
   if (loading) {
     return (
-      <div className="space-y-6 pb-24 pt-4 px-4">
-        <p className="text-muted-foreground">Loading event details...</p>
+      <div className="flex min-h-[40vh] items-center justify-center pb-24 pt-4 px-4">
+        <BULoading />
       </div>
     )
   }

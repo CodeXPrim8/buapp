@@ -82,7 +82,7 @@ export interface VendorPendingSale {
 export interface Notification {
   id: string
   user_id: string
-  type: 'transfer_received' | 'transfer_sent' | 'event_invite' | 'ticket_purchased' | 'withdrawal_completed'
+  type: 'transfer_received' | 'transfer_sent' | 'event_invite' | 'ticket_purchased' | 'withdrawal_completed' | 'withdrawal_requested' | 'friend_request' | 'friend_request_accepted'
   title: string
   message: string
   amount?: number
@@ -102,6 +102,8 @@ export interface Withdrawal {
   account_number?: string
   account_name?: string
   wallet_address?: string
+  funds_locked?: boolean
+  locked_at?: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   created_at: string
   completed_at?: string

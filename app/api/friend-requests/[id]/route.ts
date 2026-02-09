@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { successResponse, errorResponse, getAuthUser } from '@/lib/api-helpers'
+import { sendPushToUser } from '@/lib/push'
 
 // Accept, decline, block, or cancel friend request
 export async function PUT(
@@ -80,12 +81,20 @@ export async function PUT(
         ? `${receiver.first_name || ''} ${receiver.last_name || ''}`.trim() || 'Someone'
         : 'Someone'
 
+      const notificationTitle = 'Friend Request Accepted'
+      const notificationMessage = `${receiverName} accepted your friend request`
       await supabase.from('notifications').insert({
         user_id: friendRequest.sender_id,
         type: 'friend_request_accepted',
-        title: 'Friend Request Accepted',
-        message: `${receiverName} accepted your friend request`,
+        title: notificationTitle,
+        message: notificationMessage,
         metadata: { friend_request_id: id, contact_id: authUser.userId },
+      })
+
+      void sendPushToUser(friendRequest.sender_id, {
+        title: notificationTitle,
+        body: notificationMessage,
+        data: { url: '/?page=notifications' },
       })
     }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/admin-api'
+import BULoading from '@/components/bu-loading'
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<any[]>([])
@@ -70,7 +71,7 @@ export default function TransactionsPage() {
       {/* Transactions Table */}
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center">Loading transactions...</div>
+          <div className="p-8 flex justify-center"><BULoading /></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

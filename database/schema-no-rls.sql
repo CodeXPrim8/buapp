@@ -102,6 +102,19 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Push subscriptions table
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, endpoint)
+);
+
 -- Withdrawals table
 CREATE TABLE IF NOT EXISTS withdrawals (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -114,6 +127,8 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   account_number TEXT,
   account_name TEXT,
   wallet_address TEXT,
+  funds_locked BOOLEAN DEFAULT FALSE,
+  locked_at TIMESTAMP WITH TIME ZONE,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   completed_at TIMESTAMP WITH TIME ZONE
@@ -135,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_vendor_sales_status ON vendor_pending_sales(statu
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON withdrawals(user_id);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -166,6 +182,10 @@ DROP TRIGGER IF EXISTS update_vendor_sales_updated_at ON vendor_pending_sales;
 CREATE TRIGGER update_vendor_sales_updated_at BEFORE UPDATE ON vendor_pending_sales
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_push_subscriptions_updated_at ON push_subscriptions;
+CREATE TRIGGER update_push_subscriptions_updated_at BEFORE UPDATE ON push_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- IMPORTANT: Disable RLS for custom auth system
 -- Since we're using PIN-based auth, not Supabase Auth, we disable RLS
 -- Security is handled in API routes instead
@@ -177,3 +197,4 @@ ALTER TABLE transfers DISABLE ROW LEVEL SECURITY;
 ALTER TABLE vendor_pending_sales DISABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
 ALTER TABLE withdrawals DISABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions DISABLE ROW LEVEL SECURITY;

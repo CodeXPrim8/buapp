@@ -197,6 +197,8 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
                   const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
                   if (typeof window !== 'undefined') {
                     sessionStorage.setItem('cached_balance', newBalance.toString())
+                    sessionStorage.setItem('balance_updated_at', Date.now().toString())
+                    window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
                   }
                 }
               } catch (error) {
@@ -261,6 +263,8 @@ export default function PaystackPayment({ amount: initialAmount, onSuccess, onCa
                         const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
                         if (typeof window !== 'undefined') {
                           sessionStorage.setItem('cached_balance', newBalance.toString())
+                          sessionStorage.setItem('balance_updated_at', Date.now().toString())
+                          window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
                         }
                       }
                     } catch (error) {
