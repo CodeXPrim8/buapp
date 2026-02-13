@@ -8,6 +8,7 @@ export default function WithdrawalsPage() {
   const [withdrawals, setWithdrawals] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
+  const [sendingId, setSendingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchWithdrawals()
@@ -47,6 +48,26 @@ export default function WithdrawalsPage() {
     }
   }
 
+  const handleSendPaystack = async (id: string) => {
+    if (!confirm('Send this amount to the user\'s bank account via Paystack? This will mark the withdrawal as completed.')) {
+      return
+    }
+    setSendingId(id)
+    try {
+      const response = await adminApi.sendWithdrawalPaystack(id)
+      if (response.success) {
+        fetchWithdrawals()
+        alert('Naira sent successfully. Withdrawal marked completed.')
+      } else {
+        alert(response.error || 'Failed to send via Paystack')
+      }
+    } catch (error: any) {
+      alert(error?.message || 'Failed to send via Paystack')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -83,6 +104,7 @@ export default function WithdrawalsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">User</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Bank / Account</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Created</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
@@ -99,6 +121,16 @@ export default function WithdrawalsPage() {
                       Ƀ {w.buAmount.toLocaleString()} / ₦{w.nairaAmount.toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white capitalize">{w.type}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      {w.type === 'bank' ? (
+                        <div className="space-y-0.5">
+                          <div><span className="text-gray-500 dark:text-gray-400">Bank:</span> {w.bankName || '—'}</div>
+                          <div><span className="text-gray-500 dark:text-gray-400">Acct:</span> {w.accountNumber || '—'} · {w.accountName || '—'}</div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-400">{w.walletAddress ? `${w.walletAddress.slice(0, 12)}…` : '—'}</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                         w.status === 'completed' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
@@ -113,23 +145,32 @@ export default function WithdrawalsPage() {
                       {new Date(w.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4">
-                      {w.status === 'pending' && (
-                        <div className="flex space-x-2">
+                      {(w.status === 'pending' || w.status === 'processing') && (
+                        <div className="flex flex-wrap gap-2">
+                          {w.type === 'bank' && (
+                            <button
+                              onClick={() => handleSendPaystack(w.id)}
+                              disabled={sendingId === w.id}
+                              className="text-sm px-2 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {sendingId === w.id ? 'Sending…' : 'Send Naira (Paystack)'}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'processing')}
-                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400"
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-sm"
                           >
                             Process
                           </button>
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'completed')}
-                            className="text-green-600 hover:text-green-900 dark:text-green-400"
+                            className="text-green-600 hover:text-green-900 dark:text-green-400 text-sm"
                           >
                             Complete
                           </button>
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'failed')}
-                            className="text-red-600 hover:text-red-900 dark:text-red-400"
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 text-sm"
                           >
                             Reject
                           </button>

@@ -110,7 +110,12 @@ export default function NotificationBell({ onNavigate }: NotificationBellProps) 
 
     loadNotifications()
     const interval = setInterval(loadNotifications, 10000)
-    return () => clearInterval(interval)
+    const handleUpdated = () => loadNotifications()
+    window.addEventListener('notifications-updated', handleUpdated)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('notifications-updated', handleUpdated)
+    }
   }, [permission])
 
   useEffect(() => {

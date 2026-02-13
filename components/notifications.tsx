@@ -69,19 +69,23 @@ export default function Notifications({ onNavigate }: NotificationsProps = {}) {
     }
 
     const markAllAsReadOnOpen = async () => {
-      // Mark all notifications as read when the page is opened
       try {
         await notificationApi.markAllAsRead()
-        // Reload notifications to get updated read status
-        await loadNotifications()
+        // Update local state so badge and list stay in sync
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('notifications-updated'))
+        }
       } catch (error) {
         console.error('Failed to mark all notifications as read:', error)
       }
     }
 
-    // Mark all as read when component mounts (user opens notifications page)
+    // Load list first so user always sees notifications (fixes badge showing count but list empty)
+    loadNotifications()
+    // Then mark all as read in the background (don't block list from showing)
     markAllAsReadOnOpen()
-    
+
     // Poll for new notifications every 5 seconds
     const interval = setInterval(loadNotifications, 5000)
 

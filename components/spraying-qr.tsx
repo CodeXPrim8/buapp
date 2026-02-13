@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,8 +36,13 @@ export default function SprayingQR() {
   const [scannedData, setScannedData] = useState<string>('')
   const [eventDetails, setEventDetails] = useState<EventDetails | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [transfers, setTransfers] = useState<BUTransfer[]>([])
   const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const detectorRef = useRef<any>(null)
+  const scanningRef = useRef(false)
 
   const [sprayForm, setSprayForm] = useState({
     amount: '',
@@ -46,10 +51,71 @@ export default function SprayingQR() {
   const [showPinVerification, setShowPinVerification] = useState(false)
   const [pendingTransfer, setPendingTransfer] = useState<BUTransfer | null>(null)
 
-  const handleScanQR = () => {
-    setCameraActive(true)
-    // Simulated QR scan - in production, this would use a QR scanner library
-    // For demo, we'll simulate scanning after a button click
+  const stopCamera = () => {
+    scanningRef.current = false
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setCameraActive(false)
+    setCameraError('')
+  }
+
+  useEffect(() => {
+    return () => stopCamera()
+  }, [])
+
+  const scanLoop = async () => {
+    if (!scanningRef.current || !videoRef.current || !detectorRef.current) return
+    try {
+      const detections = await detectorRef.current.detect(videoRef.current)
+      if (detections?.length > 0) {
+        const value = detections[0]?.rawValue ?? detections[0]?.data ?? ''
+        if (value) {
+          handleQRCodeScanned(String(value))
+          stopCamera()
+          return
+        }
+      }
+    } catch {
+      // ignore frame errors
+    }
+    if (scanningRef.current) {
+      requestAnimationFrame(scanLoop)
+    }
+  }
+
+  const startCamera = async () => {
+    setCameraError('')
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera is not supported on this device. Use "Simulate Scan (Demo)" below.')
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+      })
+      streamRef.current = stream
+      setCameraPermission('granted')
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      setCameraActive(true)
+      if ('BarcodeDetector' in window) {
+        detectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
+        scanningRef.current = true
+        requestAnimationFrame(scanLoop)
+      } else {
+        setCameraError('QR scanning not supported in this browser. Use "Simulate Scan (Demo)" or try another browser.')
+      }
+    } catch (err: any) {
+      setCameraPermission('denied')
+      setCameraError(err?.message || 'Could not access camera. Allow camera permission in settings or use "Simulate Scan (Demo)".')
+    }
   }
 
   const simulateQRScan = async () => {
@@ -277,11 +343,19 @@ export default function SprayingQR() {
                     </div>
                   </div>
                   <Button
-                    onClick={handleScanQR}
+                    onClick={startCamera}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     Start QR Scanner
                   </Button>
+                  {cameraError && (
+                    <p className="text-xs text-destructive text-center">{cameraError}</p>
+                  )}
+                  {cameraPermission === 'denied' && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Allow camera in your browser or device settings to scan QR codes.
+                    </p>
+                  )}
                   <Button
                     onClick={simulateQRScan}
                     variant="outline"
@@ -298,22 +372,31 @@ export default function SprayingQR() {
                       className="h-full w-full object-cover"
                       autoPlay
                       playsInline
+                      muted
                     />
-                    <div className="absolute inset-0 border-4 border-primary/50">
+                    <div className="absolute inset-0 border-4 border-primary/50 pointer-events-none">
                       <div className="absolute inset-4 border border-dashed border-primary/30" />
                     </div>
                     <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white bg-black/50 px-2 py-1 rounded">
-                      Point at QR code
+                      Point camera at event QR code
                     </p>
                   </div>
                   <Button
+                    onClick={stopCamera}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Stop camera
+                  </Button>
+                  <Button
                     onClick={() => {
-                      setCameraActive(false)
+                      stopCamera()
                       simulateQRScan()
                     }}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    variant="ghost"
+                    className="w-full text-sm text-muted-foreground"
                   >
-                    Scan Complete
+                    Use demo scan instead
                   </Button>
                 </div>
               )}

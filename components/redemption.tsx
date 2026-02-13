@@ -4,9 +4,43 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Banknote, CheckCircle, AlertCircle, Wallet, Building2 } from 'lucide-react'
+import { Banknote, CheckCircle, AlertCircle, Wallet, Building2, Clock, Loader2 } from 'lucide-react'
 import { withdrawalsApi } from '@/lib/api-client'
 import PinVerification from '@/components/pin-verification'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+
+const NIGERIAN_BANKS = [
+  'Access Bank Plc',
+  'Citibank Nigeria Limited',
+  'Ecobank Nigeria Plc',
+  'Fidelity Bank Plc',
+  'First Bank of Nigeria Limited',
+  'First City Monument Bank Plc',
+  'Globus Bank Limited',
+  'Guaranty Trust Bank Plc',
+  'Keystone Bank Limited',
+  'Nova Commercial Bank Limited',
+  'Optimus Bank Limited',
+  'Parallex Bank Limited',
+  'Polaris Bank Limited',
+  'Premium Trust Bank Limited',
+  'Providus Bank Limited',
+  'Signature Bank Limited',
+  'Stanbic IBTC Bank Plc',
+  'Standard Chartered Bank Nigeria Limited',
+  'Sterling Bank Plc',
+  'SunTrust Bank Nigeria Limited',
+  'Titan Trust Bank Limited',
+  'Union Bank of Nigeria Plc',
+  'Unity Bank Plc',
+  'Wema Bank Plc',
+  'Zenith Bank Plc',
+]
 
 interface WithdrawalRequest {
   id: string
@@ -39,6 +73,7 @@ export default function Redemption({
 }: RedemptionProps) {
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [receiptWithdrawal, setReceiptWithdrawal] = useState<WithdrawalRequest | null>(null)
 
   // Fetch withdrawals from API
   useEffect(() => {
@@ -128,6 +163,20 @@ export default function Redemption({
     setShowPinVerification(true)
   }
 
+  const mapApiWithdrawal = (w: any): WithdrawalRequest => ({
+    id: w.id,
+    buAmount: parseFloat(w.bu_amount?.toString() || '0'),
+    nairaAmount: parseFloat(w.naira_amount?.toString() || '0'),
+    type: w.type,
+    bankName: w.bank_name || undefined,
+    accountNumber: w.account_number ? `****${w.account_number.slice(-4)}` : undefined,
+    accountName: w.account_name || undefined,
+    walletAddress: w.wallet_address || undefined,
+    status: w.status,
+    date: new Date(w.created_at).toISOString().split('T')[0],
+    completedDate: w.completed_at ? new Date(w.completed_at).toISOString().split('T')[0] : undefined,
+  })
+
   const handlePinVerified = async (pin: string) => {
     if (!pendingWithdrawal) return
 
@@ -140,6 +189,11 @@ export default function Redemption({
       })
       
       if (response.success) {
+        // Show receipt from API response
+        const created = response.data?.withdrawal
+        if (created) {
+          setReceiptWithdrawal(mapApiWithdrawal(created))
+        }
         // Update balance cache after withdrawal (balance will decrease)
         try {
           const { walletApi } = await import('@/lib/api-client')
@@ -159,25 +213,13 @@ export default function Redemption({
         // Refresh withdrawals list
         const withdrawalsResponse = await withdrawalsApi.list(50, 0)
         if (withdrawalsResponse.success && withdrawalsResponse.data?.withdrawals) {
-          const formattedWithdrawals: WithdrawalRequest[] = withdrawalsResponse.data.withdrawals.map((w: any) => ({
-            id: w.id,
-            buAmount: parseFloat(w.bu_amount?.toString() || '0'),
-            nairaAmount: parseFloat(w.naira_amount?.toString() || '0'),
-            type: w.type,
-            bankName: w.bank_name || undefined,
-            accountNumber: w.account_number ? `****${w.account_number.slice(-4)}` : undefined,
-            accountName: w.account_name || undefined,
-            walletAddress: w.wallet_address || undefined,
-            status: w.status,
-            date: new Date(w.created_at).toISOString().split('T')[0],
-            completedDate: w.completed_at ? new Date(w.completed_at).toISOString().split('T')[0] : undefined,
-          }))
+          const formattedWithdrawals: WithdrawalRequest[] = withdrawalsResponse.data.withdrawals.map((w: any) => mapApiWithdrawal(w))
           setWithdrawals(formattedWithdrawals)
         }
 
         setForm({
           buAmount: '',
-          bankName: 'GTBank',
+          bankName: '',
           accountNumber: '',
           accountName: '',
           walletAddress: '',
@@ -185,7 +227,6 @@ export default function Redemption({
         setShowForm(false)
         setWithdrawalType(null)
         setPendingWithdrawal(null)
-        alert('Withdrawal request submitted successfully!')
       } else {
         alert(response.error || 'Failed to create withdrawal request')
         setPendingWithdrawal(null)
@@ -221,6 +262,17 @@ export default function Redemption({
         return 'bg-yellow-400/10'
       default:
         return 'bg-gray-400/10'
+    }
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-400" />
+      case 'processing':
+        return <Loader2 className="h-4 w-4 text-yellow-400 animate-spin" />
+      default:
+        return <Clock className="h-4 w-4 text-gray-400" />
     }
   }
 
@@ -393,19 +445,18 @@ export default function Redemption({
 
               <div>
                 <label className="text-sm font-semibold">Bank Name *</label>
-                <select
+                <Input
+                  list="nigerian-banks"
+                  placeholder="Start typing to search or enter bank name"
                   value={form.bankName}
                   onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-                  className="mt-2 w-full rounded-lg border border-border bg-secondary px-3 py-2 text-foreground"
-                >
-                  <option>GTBank</option>
-                  <option>Access Bank</option>
-                  <option>Zenith Bank</option>
-                  <option>First Bank</option>
-                  <option>UBA</option>
-                  <option>Fidelity Bank</option>
-                  <option>Union Bank</option>
-                </select>
+                  className="mt-2 bg-secondary text-foreground placeholder:text-muted-foreground"
+                />
+                <datalist id="nigerian-banks">
+                  {NIGERIAN_BANKS.map((bank) => (
+                    <option key={bank} value={bank} />
+                  ))}
+                </datalist>
               </div>
 
               <div>
@@ -469,7 +520,11 @@ export default function Redemption({
             withdrawals.map((withdrawal) => (
             <Card
                 key={withdrawal.id}
-                className={`border-border/50 ${getStatusBg(withdrawal.status)} bg-card/50 p-4`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setReceiptWithdrawal(withdrawal)}
+                onKeyDown={(e) => e.key === 'Enter' && setReceiptWithdrawal(withdrawal)}
+                className={`cursor-pointer border-border/50 ${getStatusBg(withdrawal.status)} bg-card/50 p-4 transition hover:border-primary/30`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -488,9 +543,10 @@ export default function Redemption({
                       )}
                     </h3>
                     <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold capitalize ${getStatusColor(withdrawal.status)}`}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${getStatusColor(withdrawal.status)} ${getStatusBg(withdrawal.status)} border-current/20`}
                     >
-                        {withdrawal.status}
+                        {getStatusIcon(withdrawal.status)}
+                        {withdrawal.status === 'completed' ? 'Completed' : withdrawal.status === 'processing' ? 'Processing' : 'Pending'}
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
@@ -529,6 +585,84 @@ export default function Redemption({
           description="Enter your PIN to confirm this withdrawal request"
         />
       )}
+
+      {/* Withdrawal receipt (after confirm) - mobile-first bottom sheet */}
+      <Sheet open={!!receiptWithdrawal} onOpenChange={(open) => !open && setReceiptWithdrawal(null)}>
+        <SheetContent
+          side="bottom"
+          className="left-0 right-0 w-full max-w-[100vw] rounded-t-2xl border-t border-border bg-background p-0 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[92dvh] overflow-hidden flex flex-col sm:left-1/2 sm:right-auto sm:max-w-[400px] sm:-translate-x-1/2 sm:rounded-t-2xl"
+        >
+          <div className="flex flex-col overflow-y-auto flex-1 min-h-0">
+            {/* Drag handle for mobile bottom sheet */}
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden />
+            </div>
+            <SheetHeader className="px-4 pt-2 pb-2">
+              <SheetTitle className="text-center text-lg">Withdrawal Receipt</SheetTitle>
+            </SheetHeader>
+            {receiptWithdrawal && (
+            <div className="px-4 mt-4 space-y-5 pb-6">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center">
+                <p className="text-sm text-muted-foreground">Amount</p>
+                <p className="mt-1 text-2xl font-bold text-primary">Ƀ {receiptWithdrawal.buAmount.toLocaleString()}</p>
+                <p className="text-lg font-semibold">₦{receiptWithdrawal.nairaAmount.toLocaleString('en-NG')}</p>
+              </div>
+              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={`inline-flex items-center gap-1.5 font-semibold capitalize ${getStatusColor(receiptWithdrawal.status)}`}>
+                    {getStatusIcon(receiptWithdrawal.status)}
+                    {receiptWithdrawal.status === 'completed' ? 'Completed' : receiptWithdrawal.status === 'processing' ? 'Processing' : 'Pending'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Date</span>
+                  <span>{receiptWithdrawal.date}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Type</span>
+                  <span>{receiptWithdrawal.type === 'wallet' ? 'ɃU Wallet' : 'Bank Account'}</span>
+                </div>
+                {receiptWithdrawal.type === 'bank' && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Bank</span>
+                      <span>{receiptWithdrawal.bankName}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Account</span>
+                      <span>{receiptWithdrawal.accountNumber} · {receiptWithdrawal.accountName}</span>
+                    </div>
+                  </>
+                )}
+                {receiptWithdrawal.type === 'wallet' && receiptWithdrawal.walletAddress && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Wallet</span>
+                    <span className="truncate max-w-[180px]">{receiptWithdrawal.walletAddress}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                {receiptWithdrawal.status === 'pending' || receiptWithdrawal.status === 'processing'
+                  ? 'Your withdrawal will be processed shortly. You can track it in Withdrawal History.'
+                  : 'This withdrawal has been completed.'}
+              </p>
+            </div>
+            )}
+            {/* Sticky Done button - mobile safe area */}
+            {receiptWithdrawal && (
+              <div className="mt-auto px-4 pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-background border-t border-border">
+                <Button
+                  onClick={() => setReceiptWithdrawal(null)}
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 rounded-xl font-semibold"
+                >
+                  Done
+                </Button>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

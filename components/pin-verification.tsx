@@ -52,12 +52,7 @@ export default function PinVerification({
       inputRefs.current[index + 1]?.focus()
     }
 
-    // Auto-submit when all 6 digits are entered (with small delay to prevent double submission)
-    if (newPin.every(digit => digit !== '') && index === 5) {
-      setTimeout(() => {
-        handleVerify(newPin.join(''))
-      }, 100)
-    }
+    // Verification only when user clicks Verify (no auto-submit for security)
   }
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {

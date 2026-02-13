@@ -15,13 +15,13 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
     }
 
     let userId = authUser.userId.trim()
-    const { data: dbUser, error: userError } = await supabase
+    const { data: dbUser, error: dbUserError } = await supabase
       .from('users')
       .select('id')
       .eq('id', userId)
       .single()
 
-    if (userError || !dbUser) {
+    if (dbUserError || !dbUser) {
       const phoneNumber = request.headers.get('x-user-phone') || authUser.phoneNumber
       if (phoneNumber) {
         const { data: userByPhone } = await supabase
@@ -53,14 +53,14 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
 
     const { bu_amount, naira_amount, type, bank_name, account_number, account_name, wallet_address, event_id, pin } = body
 
-    // Verify PIN
-    const { data: user, error: userError } = await supabase
+    // Verify PIN (use pinUserError to avoid duplicate name with dbUserError above)
+    const { data: user, error: pinUserError } = await supabase
       .from('users')
       .select('pin_hash')
       .eq('id', userId)
       .single()
 
-    if (userError || !user) {
+    if (pinUserError || !user) {
       return errorResponse('User not found', 404)
     }
 
@@ -116,7 +116,7 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       return errorResponse(msg, 400)
     }
 
-    // Create withdrawal request (funds locked)
+    // Create withdrawal request
     const { data: withdrawal, error: withdrawalError } = await supabase
       .from('withdrawals')
       .insert([{
@@ -129,8 +129,6 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
         account_number: type === 'bank' ? account_number : null,
         account_name: type === 'bank' ? account_name : null,
         wallet_address: type === 'wallet' ? wallet_address : null,
-        funds_locked: true,
-        locked_at: new Date().toISOString(),
         status: 'pending',
       }])
       .select()

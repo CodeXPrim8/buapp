@@ -134,6 +134,11 @@ export const adminApi = {
       body: JSON.stringify({ status }),
     }),
 
+  sendWithdrawalPaystack: (id: string) =>
+    apiCall(`/admin/withdrawals/${id}/paystack-transfer`, {
+      method: 'POST',
+    }),
+
   // Payments
   getPayments: (params?: { limit?: number; offset?: number; startDate?: string; endDate?: string }) => {
     const queryParams = new URLSearchParams()
