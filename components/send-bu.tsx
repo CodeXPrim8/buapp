@@ -28,6 +28,12 @@ interface BUTransfer {
   type: 'transfer' | 'tip'
 }
 
+interface SendBUInitialData {
+  eventId?: string
+  eventName?: string
+  gatewayId?: string
+}
+
 function AllContactsList({
   contactsLoading,
   allContacts,
@@ -102,8 +108,13 @@ function AllContactsList({
   )
 }
 
-export default function SendBU() {
-  const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history'>('menu')
+interface SendBUProps {
+  initialData?: SendBUInitialData | null
+  onNavigate?: (page: string, data?: any) => void
+}
+
+export default function SendBU({ initialData, onNavigate }: SendBUProps) {
+  const [step, setStep] = useState<'menu' | 'search' | 'confirm' | 'tip-scan' | 'tip-confirm' | 'success' | 'history' | 'event-send' | 'event-success' | 'event-no-gateway'>('menu')
   const [transferType, setTransferType] = useState<'transfer' | 'tip'>('transfer')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
@@ -138,6 +149,26 @@ export default function SendBU() {
     message: '',
     type: 'info',
   })
+  const [eventSendAmount, setEventSendAmount] = useState('')
+  const [eventSendMessage, setEventSendMessage] = useState('')
+  const [pendingGatewayTransfer, setPendingGatewayTransfer] = useState<{
+    gatewayId: string
+    eventId: string
+    eventName: string
+    amount: number
+    message: string
+  } | null>(null)
+  const [eventSentAmount, setEventSentAmount] = useState<number | null>(null)
+
+  // When opened from event-info with gateway, show event-send; without gateway show event-no-gateway (only when still on menu)
+  useEffect(() => {
+    if (!initialData) return
+    setStep((s) => {
+      if (s !== 'menu') return s
+      if (initialData.gatewayId && initialData.eventName) return 'event-send'
+      return 'event-no-gateway'
+    })
+  }, [initialData?.eventId, initialData?.eventName, initialData?.gatewayId])
 
   // Fetch transfer history on mount
   useEffect(() => {
@@ -298,7 +329,71 @@ export default function SendBU() {
   }
 
   const handlePinVerified = async (pin: string) => {
-    if (!pendingTransfer || isProcessingTransfer) return
+    if (isProcessingTransfer) return
+
+    // Event gateway flow: send BU to event via gateway
+    if (pendingGatewayTransfer) {
+      try {
+        setIsProcessingTransfer(true)
+        const userResponse = await userApi.getMe()
+        const currentUser = userResponse.success && userResponse.data?.user ? userResponse.data.user : null
+        if (!currentUser?.id) {
+          setAlertPopup({ open: true, title: 'Error', message: 'Could not load your profile.', type: 'error' })
+          setShowPinVerification(false)
+          setPendingGatewayTransfer(null)
+          setIsProcessingTransfer(false)
+          return
+        }
+        const response = await transferApi.sendViaGatewayQR({
+          gateway_id: pendingGatewayTransfer.gatewayId,
+          amount: pendingGatewayTransfer.amount,
+          message: pendingGatewayTransfer.message || undefined,
+          guest_user_id: currentUser.id,
+          guest_name: currentUser.name || 'Guest',
+          guest_phone: currentUser.phoneNumber || '',
+          pin,
+        })
+        if (response.success && response.data?.transfer) {
+          setEventSentAmount(pendingGatewayTransfer.amount)
+          setPendingGatewayTransfer(null)
+          setShowPinVerification(false)
+          setStep('event-success')
+          try {
+            const { walletApi } = await import('@/lib/api-client')
+            const balanceResponse = await walletApi.getMe()
+            if (balanceResponse.success && balanceResponse.data?.wallet && typeof window !== 'undefined') {
+              const newBalance = parseFloat(balanceResponse.data.wallet.balance || '0')
+              sessionStorage.setItem('cached_balance', newBalance.toString())
+              sessionStorage.setItem('balance_updated_at', Date.now().toString())
+              window.dispatchEvent(new CustomEvent('balance-updated', { detail: { balance: newBalance.toString() } }))
+            }
+          } catch (_) {}
+        } else {
+          setAlertPopup({
+            open: true,
+            title: 'Error',
+            message: response.error || 'Transfer failed. Please try again.',
+            type: 'error',
+          })
+          setShowPinVerification(false)
+          setPendingGatewayTransfer(null)
+        }
+      } catch (error: any) {
+        setAlertPopup({
+          open: true,
+          title: 'Error',
+          message: error?.message || 'Transfer failed. Please try again.',
+          type: 'error',
+        })
+        setShowPinVerification(false)
+        setPendingGatewayTransfer(null)
+      } finally {
+        setIsProcessingTransfer(false)
+      }
+      return
+    }
+
+    if (!pendingTransfer) return
 
     try {
       setIsProcessingTransfer(true)
@@ -493,10 +588,100 @@ export default function SendBU() {
           onCancel={() => {
             setShowPinVerification(false)
             setPendingTransfer(null)
+            setPendingGatewayTransfer(null)
           }}
-          title="Confirm Transfer"
-          description="Enter your PIN to confirm this ɃU transfer"
+          title={pendingGatewayTransfer ? 'Confirm send to event' : 'Confirm Transfer'}
+          description={pendingGatewayTransfer ? 'Enter your PIN to send BU to this event' : 'Enter your PIN to confirm this ɃU transfer'}
         />
+      )}
+      {step === 'event-no-gateway' && (
+        <div className="px-4 space-y-4">
+          <Button variant="outline" onClick={() => { setStep('menu'); onNavigate?.('event-info', initialData?.eventId) }} className="w-full">
+            ← Back
+          </Button>
+          <Card className="border-border/50 bg-card p-6">
+            <p className="text-muted-foreground text-center">
+              This event doesn&apos;t accept BU transfers from the app yet. You can send BU at the venue by scanning the event&apos;s QR code.
+            </p>
+          </Card>
+        </div>
+      )}
+      {step === 'event-send' && initialData?.eventName && (
+        <div className="px-4 space-y-4">
+          <Button
+            variant="outline"
+            onClick={() => { setStep('menu'); setEventSendAmount(''); setEventSendMessage(''); onNavigate?.('event-info', initialData?.eventId) }}
+            className="w-full"
+          >
+            ← Back
+          </Button>
+          <h2 className="text-xl font-bold">Send BU to this event</h2>
+          <p className="text-sm text-muted-foreground">
+            Send BU to <strong>{initialData.eventName}</strong>. The celebrant will receive it for this event.
+          </p>
+          <Card className="border-primary/20 bg-card p-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Amount (ɃU)</label>
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="0"
+                value={eventSendAmount}
+                onChange={(e) => setEventSendAmount(e.target.value)}
+                className="bg-background"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Message (optional)</label>
+              <Input
+                placeholder="e.g. Happy birthday!"
+                value={eventSendMessage}
+                onChange={(e) => setEventSendMessage(e.target.value)}
+                className="bg-background"
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!eventSendAmount || isNaN(Number(eventSendAmount)) || Number(eventSendAmount) <= 0}
+              onClick={() => {
+                const amount = Number(eventSendAmount)
+                if (!initialData?.gatewayId || !initialData?.eventId || !initialData?.eventName || amount <= 0) return
+                setPendingGatewayTransfer({
+                  gatewayId: initialData.gatewayId,
+                  eventId: initialData.eventId,
+                  eventName: initialData.eventName,
+                  amount,
+                  message: eventSendMessage.trim(),
+                })
+                setShowPinVerification(true)
+              }}
+            >
+              Continue
+            </Button>
+          </Card>
+        </div>
+      )}
+      {step === 'event-success' && (
+        <div className="px-4 space-y-4">
+          <Card className="border-primary/20 bg-primary/5 p-6 text-center">
+            <CheckCircle className="h-12 w-12 text-primary mx-auto mb-3" />
+            <h3 className="font-semibold text-lg">BU sent to event</h3>
+            <p className="text-muted-foreground mt-1">
+              {eventSentAmount != null && `Ƀ ${eventSentAmount.toLocaleString()} was sent successfully.`}
+            </p>
+          </Card>
+          <div className="flex gap-2">
+            {onNavigate && initialData?.eventId && (
+              <Button variant="outline" className="flex-1" onClick={() => onNavigate('event-info', initialData.eventId)}>
+                Back to event
+              </Button>
+            )}
+            <Button className="flex-1" onClick={() => { setStep('menu'); setEventSentAmount(null); onNavigate?.('send-bu') }}>
+              Done
+            </Button>
+          </div>
+        </div>
       )}
       {step === 'menu' && (
         <>

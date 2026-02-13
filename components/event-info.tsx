@@ -22,6 +22,7 @@ interface Event {
   organizer?: string
   is_around_me?: boolean
   strictly_by_invitation?: boolean
+  gateway_id?: string | null
 }
 
 interface MyInvite {
@@ -75,6 +76,7 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
           ticketsAvailable: ticketsAvailable ?? 0,
           is_around_me: e.is_around_me,
           strictly_by_invitation: e.strictly_by_invitation === true,
+          gateway_id: e.gateway_id ?? undefined,
         })
       } else {
         setEvent(null)
@@ -246,23 +248,13 @@ export default function EventInfo({ eventId, onNavigate }: EventInfoProps) {
             )}
           </div>
 
-          {event.is_around_me ? (
+          {event.is_around_me && (
             <Button
               onClick={handleBuyTickets}
               className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90"
             >
               Buy Tickets
             </Button>
-          ) : (
-            onNavigate && (
-              <Button
-                variant="outline"
-                className="w-full mt-6"
-                onClick={() => onNavigate('send-bu', { eventId: event.id, eventName: event.name })}
-              >
-                Send BU to this event
-              </Button>
-            )
           )}
         </Card>
       </div>

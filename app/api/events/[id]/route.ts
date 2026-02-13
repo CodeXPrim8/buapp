@@ -72,7 +72,7 @@ export async function GET(
 
     // My Event visibility (non-negotiable): only celebrant OR users who were sent an invite AND have accepted. No one else.
     // Shows & Parties Around Me (is_around_me): any user can view.
-    const isCelebrant = event.celebrant_id === dbUserId
+    const isCelebrant = String(event.celebrant_id || '') === String(dbUserId || '')
     const isAroundMe = event.is_around_me === true
 
     const { data: userInvite } = await supabase

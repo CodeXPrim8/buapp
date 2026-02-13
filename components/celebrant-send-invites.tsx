@@ -39,6 +39,7 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
   const [selectedEventId, setSelectedEventId] = useState<string>(eventId || '')
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [defaultSeatCategory, setDefaultSeatCategory] = useState<string>('Regular')
+  const [sendError, setSendError] = useState<string | null>(null)
 
   // Fetch events and registered users from API
   useEffect(() => {
@@ -147,18 +148,19 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
     }
 
     setIsSending(true)
+    setSendError(null)
 
     try {
-      // Get user IDs from selected phone numbers
+      // Get user IDs from selected phone numbers (must be registered app users)
       const guestIds = Array.from(selectedContacts)
         .map(phoneNumber => {
           const contact = allContacts.find(c => c.phoneNumber === phoneNumber)
           return contact?.userId
         })
-        .filter((id): id is string => !!id)
+        .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
 
       if (guestIds.length === 0) {
-        alert('No valid contacts selected')
+        alert('No valid contacts selected. Only registered app users can be invited.')
         setIsSending(false)
         return
       }
@@ -194,15 +196,8 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         seat_category: seatCategories,
       })
 
-      console.log('Invite creation response:', response)
-      console.log('Response type:', typeof response)
-      console.log('Response keys:', response ? Object.keys(response) : 'null')
-      console.log('Response success:', response?.success)
-      console.log('Response error:', response?.error)
-      console.log('Response data:', response?.data)
-
       if (response && response.success) {
-        // Create local invite objects for display
+        setSendError(null)
         const newInvites: Invite[] = Array.from(selectedContacts).map(phoneNumber => {
           const contact = allContacts.find(c => c.phoneNumber === phoneNumber)
           return {
@@ -211,47 +206,18 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
             status: 'sent' as const,
           }
         })
-
         setInvites(newInvites)
         setSent(true)
         setSelectedContacts(new Set())
       } else {
-        // Handle empty or invalid response
-        if (!response || typeof response !== 'object') {
-          console.error('Invalid response object:', response)
-          alert('Failed to send invites: Invalid response from server. Please check your connection and try again.')
-        } else {
-          // Check if response is empty object
-          const responseKeys = Object.keys(response || {})
-          console.error('Failed to send invites - Response details:', {
-            response: response,
-            responseKeys: responseKeys,
-            responseType: typeof response,
-            hasError: 'error' in (response || {}),
-            hasErrors: 'errors' in (response || {}),
-            hasStatus: 'status' in (response || {}),
-            error: response?.error,
-            errors: response?.errors,
-            status: response?.status,
-            fullResponse: JSON.stringify(response, null, 2),
-          })
-          
-          // Build error message with fallbacks
-          let errorMessage = 'Unknown error occurred'
-          if (response.error) {
-            errorMessage = response.error
-          } else if (response.errors && Array.isArray(response.errors) && response.errors.length > 0) {
-            errorMessage = response.errors.join(', ')
-          } else if (response.status) {
-            errorMessage = `Request failed with status ${response.status}. Please check server logs.`
-          } else if (responseKeys.length === 0) {
-            errorMessage = 'Server returned an empty response. Please check your connection and try again.'
-          } else {
-            errorMessage = `Request failed: ${JSON.stringify(response)}`
-          }
-          
-          alert(`Failed to send invites: ${errorMessage}`)
-        }
+        const errorMessage =
+          (response && typeof response === 'object' && response.error)
+            ? String(response.error)
+            : response?.errors && Array.isArray(response.errors) && response.errors.length > 0
+              ? response.errors.join(', ')
+              : 'Failed to send invites. Please try again.'
+        setSendError(errorMessage)
+        alert(errorMessage)
       }
     } catch (error: any) {
       console.error('Error sending invites:', error)
@@ -486,6 +452,21 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         >
           {isSending ? 'Sending Invites...' : `Send ${selectedContacts.size > 0 ? `${selectedContacts.size} ` : ''}Invite${selectedContacts.size !== 1 ? 's' : ''}`}
         </Button>
+
+        {/* Inline error from server (e.g. max guests reached) */}
+        {sendError && (
+          <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-destructive flex-1">{sendError}</p>
+            <button
+              type="button"
+              onClick={() => setSendError(null)}
+              className="text-destructive hover:underline text-xs flex-shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Info Card */}
         <Card className="border-border/50 bg-card/50 p-4 mt-4">

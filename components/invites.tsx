@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, CheckCircle, Clock, QrCode, Download } from 'lucide-react'
 import { invitesApi } from '@/lib/api-client'
+import BULoading from '@/components/bu-loading'
 
 interface Invite {
   id: string

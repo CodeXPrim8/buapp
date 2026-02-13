@@ -44,9 +44,18 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       hasBody: !!body,
     })
 
-    if (!event_id || !guest_ids || !Array.isArray(guest_ids) || guest_ids.length === 0) {
-      console.error('Validation failed:', { event_id, guest_ids, hasBody: !!body })
-      return errorResponse('Event ID and guest IDs are required', 400)
+    if (!event_id || typeof event_id !== 'string' || event_id.trim() === '') {
+      return errorResponse('Event ID is required', 400)
+    }
+    if (!guest_ids || !Array.isArray(guest_ids)) {
+      return errorResponse('guest_ids must be an array of user IDs', 400)
+    }
+    if (guest_ids.length === 0) {
+      return errorResponse('Select at least one guest to invite', 400)
+    }
+    const invalidGuestId = guest_ids.find((id: any) => typeof id !== 'string' || !id || id.trim() === '')
+    if (invalidGuestId !== undefined) {
+      return errorResponse('Each guest ID must be a non-empty string', 400)
     }
 
     // First verify the user exists in database to get the correct UUID format
@@ -170,12 +179,18 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
 
     if (guestsError) {
       console.error('Error looking up guests:', guestsError)
-      return errorResponse('Failed to verify guest IDs: ' + guestsError.message, 400)
+      return errorResponse(
+        'Could not find some guests. Make sure you selected registered app users. ' + (guestsError.message || ''),
+        400
+      )
     }
 
     if (!guests || guests.length === 0) {
       console.error('No guests found for IDs:', guest_ids)
-      return errorResponse('Invalid guest IDs. Guests not found in database.', 400)
+      return errorResponse(
+        'None of the selected guests were found. They must be registered in the app.',
+        400
+      )
     }
 
     if (guests.length !== guest_ids.length) {
