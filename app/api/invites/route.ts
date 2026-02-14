@@ -344,7 +344,7 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
   }
 })
 
-// Get invites (GET) - Get invites for current user or for an event
+// Get invites (GET) - Get invites for current user or for an event (guests include vendors)
 export async function GET(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
@@ -353,76 +353,40 @@ export async function GET(request: NextRequest) {
       return errorResponse('Authentication required', 401)
     }
 
-    // Verify user exists in database to get correct UUID format
-    const userId = authUser.userId
+    // Resolve database user ID (same for all roles including vendor)
+    const userId = String(authUser.userId).trim()
+    let dbUserId: string | null = null
+
     const { data: dbUser, error: userError } = await supabase
       .from('users')
       .select('id')
-      .eq('id', userId.trim())
+      .eq('id', userId)
       .single()
 
-    if (userError || !dbUser) {
-      // Try by phone number as fallback
-      const phoneNumber = request.headers.get('x-user-phone')
+    if (!userError && dbUser) {
+      dbUserId = dbUser.id
+      console.log('User verified by id:', dbUserId)
+    }
+
+    if (!dbUserId) {
+      const phoneNumber = request.headers.get('x-user-phone') || authUser.phoneNumber
       if (phoneNumber) {
         const { data: userByPhone } = await supabase
           .from('users')
           .select('id')
           .eq('phone_number', phoneNumber)
           .single()
-        
         if (userByPhone) {
-          const dbUserId = userByPhone.id
-          console.log('User found by phone, using ID:', dbUserId)
-          
-          const searchParams = request.nextUrl.searchParams
-          const eventId = searchParams.get('event_id')
-          const type = searchParams.get('type') || 'received'
-
-          let query = supabase
-            .from('invites')
-            .select(`
-              *,
-              event:events(id, name, date, location),
-              celebrant:users!invites_celebrant_id_fkey(id, first_name, last_name, phone_number),
-              guest:users!invites_guest_id_fkey(id, first_name, last_name, phone_number)
-            `)
-
-          if (type === 'received') {
-            query = query.eq('guest_id', dbUserId)
-            console.log('Fetching received invites for guest_id:', dbUserId)
-          } else if (type === 'sent') {
-            if (authUser.role === 'vendor') {
-              return errorResponse('Vendors cannot view sent invites', 403)
-            }
-            query = query.eq('celebrant_id', dbUserId)
-            console.log('Fetching sent invites for celebrant_id:', dbUserId)
-          }
-
-          if (eventId) {
-            query = query.eq('event_id', eventId)
-          }
-
-          query = query.order('created_at', { ascending: false })
-
-          const { data: invites, error } = await query
-
-          if (error) {
-            console.error('Error fetching invites:', error)
-            return errorResponse('Failed to fetch invites: ' + error.message, 500)
-          }
-
-          console.log(`Found ${invites?.length || 0} invites`)
-          return successResponse({ invites: invites || [] })
+          dbUserId = userByPhone.id
+          console.log('User verified by phone:', dbUserId)
         }
       }
-      
-      console.error('User not found in database. User ID:', userId)
-      return errorResponse('User not found. Please login again.', 401)
     }
 
-    const dbUserId = dbUser.id
-    console.log('User verified, using ID:', dbUserId)
+    if (!dbUserId) {
+      console.error('User not found in database. User ID:', userId, 'phone:', authUser.phoneNumber ? 'present' : 'missing')
+      return errorResponse('User not found. Please login again.', 401)
+    }
 
     const searchParams = request.nextUrl.searchParams
     const eventId = searchParams.get('event_id')

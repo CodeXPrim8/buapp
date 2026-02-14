@@ -6,9 +6,9 @@ import { successResponse, errorResponse, validateBody, getAuthUser } from '@/lib
 export async function POST(request: NextRequest) {
   try {
     const authUser = await getAuthUser(request)
-    // Allow vendors and users with 'both' role to create gateways
-    if (!authUser || (authUser.role !== 'vendor' && authUser.role !== 'both')) {
-      return errorResponse('Unauthorized. Only vendors can create gateways.', 401)
+    // Allow vendors, celebrants, and users with 'both' role to create gateways
+    if (!authUser || (authUser.role !== 'vendor' && authUser.role !== 'both' && authUser.role !== 'celebrant')) {
+      return errorResponse('Unauthorized. Only vendors or celebrants can create gateways.', 401)
     }
 
     const body = await request.json()

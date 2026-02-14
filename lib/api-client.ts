@@ -453,13 +453,14 @@ export const eventsApi = {
     is_around_me?: boolean
   }) => api.post('/events', data, true),
 
-  list: (params?: { city?: string; category?: string; search?: string; around_me?: boolean; my_events?: boolean; user_city?: string; user_state?: string }) => {
+  list: (params?: { city?: string; category?: string; search?: string; around_me?: boolean; my_events?: boolean; for_gateway_link?: boolean; user_city?: string; user_state?: string }) => {
     const queryParams = new URLSearchParams()
     if (params?.city) queryParams.append('city', params.city)
     if (params?.category) queryParams.append('category', params.category)
     if (params?.search) queryParams.append('search', params.search)
     if (params?.around_me) queryParams.append('around_me', 'true')
     if (params?.my_events) queryParams.append('my_events', 'true')
+    if (params?.for_gateway_link) queryParams.append('for_gateway_link', 'true')
     if (params?.user_city) queryParams.append('user_city', params.user_city)
     if (params?.user_state) queryParams.append('user_state', params.user_state)
     const queryString = queryParams.toString()

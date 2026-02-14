@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CheckCircle, UserPlus, Search, Phone } from 'lucide-react'
-import { userApi, invitesApi, eventsApi } from '@/lib/api-client'
+import { CheckCircle, UserPlus, Search, Phone, Store } from 'lucide-react'
+import { userApi, invitesApi, eventsApi, contactsApi } from '@/lib/api-client'
 import BULoading from '@/components/bu-loading'
 
 interface Contact {
@@ -13,6 +13,14 @@ interface Contact {
   name: string
   registered: boolean
   userId?: string
+  id?: string
+  role?: string
+}
+
+interface SelectedVendor {
+  userId: string
+  phoneNumber: string
+  name: string
 }
 
 interface Invite {
@@ -40,15 +48,18 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [defaultSeatCategory, setDefaultSeatCategory] = useState<string>('Regular')
   const [sendError, setSendError] = useState<string | null>(null)
+  const [selectedVendors, setSelectedVendors] = useState<SelectedVendor[]>([])
+  const [vendorPhoneInput, setVendorPhoneInput] = useState('')
+  const [vendorLookupLoading, setVendorLookupLoading] = useState(false)
+  const [vendorLookupError, setVendorLookupError] = useState<string | null>(null)
 
-  // Fetch events and registered users from API
+  // Fetch events and BU contacts from API
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
         setLoadingEvents(true)
         
-        // Fetch events - only events created by this celebrant
         const eventsResponse = await eventsApi.list({ my_events: true })
         if (eventsResponse.success && eventsResponse.data?.events) {
           const formattedEvents = eventsResponse.data.events.map((e: any) => ({
@@ -57,21 +68,20 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
             date: e.date,
           }))
           setEvents(formattedEvents)
-          // If no eventId was passed but events exist, select the first one
           if (!selectedEventId && formattedEvents.length > 0) {
             setSelectedEventId(formattedEvents[0].id)
           }
         }
 
-        // Fetch registered users
-        const usersResponse = await userApi.list(searchQuery || undefined, 100, 0)
-        if (usersResponse.success && usersResponse.data?.users) {
-          // Convert API users to Contact format - all are registered since they come from the database
-          const contacts: Contact[] = usersResponse.data.users.map((user: any) => ({
-            phoneNumber: user.phoneNumber,
-            name: user.name,
-            registered: true, // All users from API are registered
-            userId: user.id,
+        const contactsResponse = await contactsApi.list()
+        if (contactsResponse.success && contactsResponse.data?.contacts) {
+          const contacts: Contact[] = (contactsResponse.data.contacts as any[]).map((c: any) => ({
+            phoneNumber: c.phone_number || '',
+            name: c.name || 'Unknown',
+            registered: true,
+            userId: c.id,
+            id: c.id,
+            role: c.role || 'user',
           }))
           setAllContacts(contacts)
         } else {
@@ -87,7 +97,7 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
     }
 
     fetchData()
-  }, [searchQuery])
+  }, [])
   
   // Set selected event when eventId prop changes
   useEffect(() => {
@@ -134,11 +144,67 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
     })
   }
 
+  const vendorContacts = allContacts.filter(c => c.role === 'vendor' || c.role === 'both')
+  const isVendorSelected = (userId: string) => selectedVendors.some(v => v.userId === userId)
+  const toggleVendor = (c: Contact) => {
+    if (!c.userId) return
+    if (isVendorSelected(c.userId)) {
+      setSelectedVendors(prev => prev.filter(v => v.userId !== c.userId))
+    } else {
+      setSelectedVendors(prev => [...prev, { userId: c.userId, phoneNumber: c.phoneNumber, name: c.name }])
+    }
+  }
+  const removeVendor = (userId: string) => {
+    setSelectedVendors(prev => prev.filter(v => v.userId !== userId))
+  }
+  const handleVendorLookup = async () => {
+    const phone = vendorPhoneInput.trim().replace(/\D/g, '')
+    if (phone.length < 2) {
+      setVendorLookupError('Enter at least 2 digits')
+      return
+    }
+    setVendorLookupError(null)
+    setVendorLookupLoading(true)
+    try {
+      const response = await userApi.search(vendorPhoneInput, true)
+      if (response.success && response.data?.users?.length) {
+        const user = response.data.users[0]
+        const role = (user as any).role || 'user'
+        if (role !== 'vendor' && role !== 'both') {
+          setVendorLookupError('This number is not registered as a vendor in BU.')
+          return
+        }
+        if (selectedVendors.some(v => v.userId === user.id)) {
+          setVendorLookupError('Vendor already added.')
+          return
+        }
+        setSelectedVendors(prev => [...prev, {
+          userId: user.id,
+          phoneNumber: user.phoneNumber || '',
+          name: user.name || 'Vendor',
+        }])
+        setVendorPhoneInput('')
+      } else {
+        setVendorLookupError('No vendor found with this number.')
+      }
+    } catch {
+      setVendorLookupError('Lookup failed. Try again.')
+    } finally {
+      setVendorLookupLoading(false)
+    }
+  }
+
   const handleSendInvites = async () => {
     const eventIdToUse = selectedEventId || eventId
     
-    if (selectedContacts.size === 0) {
-      alert('Please select at least one contact to invite')
+    const guestIdsFromContacts = Array.from(selectedContacts)
+      .map(phoneNumber => allContacts.find(c => c.phoneNumber === phoneNumber)?.userId)
+      .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+    const guestIdsFromVendors = selectedVendors.map(v => v.userId)
+    const guestIds = [...new Set([...guestIdsFromContacts, ...guestIdsFromVendors])]
+
+    if (guestIds.length === 0) {
+      alert('Please select at least one guest or vendor to invite')
       return
     }
 
@@ -151,19 +217,6 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
     setSendError(null)
 
     try {
-      // Get user IDs from selected phone numbers (must be registered app users)
-      const guestIds = Array.from(selectedContacts)
-        .map(phoneNumber => {
-          const contact = allContacts.find(c => c.phoneNumber === phoneNumber)
-          return contact?.userId
-        })
-        .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
-
-      if (guestIds.length === 0) {
-        alert('No valid contacts selected. Only registered app users can be invited.')
-        setIsSending(false)
-        return
-      }
 
       // Debug logging
       const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
@@ -177,7 +230,8 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
       // Prepare seat categories array matching guest_ids order
       const seatCategories = guestIds.map(id => {
         const contact = allContacts.find(c => c.userId === id)
-        return contact ? (contactSeatCategories.get(contact.phoneNumber) || defaultSeatCategory) : defaultSeatCategory
+        if (contact) return contactSeatCategories.get(contact.phoneNumber) || defaultSeatCategory
+        return defaultSeatCategory
       })
 
       // Call API to create invites
@@ -198,17 +252,19 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
 
       if (response && response.success) {
         setSendError(null)
-        const newInvites: Invite[] = Array.from(selectedContacts).map(phoneNumber => {
+        const fromContacts: Invite[] = Array.from(selectedContacts).map(phoneNumber => {
           const contact = allContacts.find(c => c.phoneNumber === phoneNumber)
-          return {
-            phoneNumber,
-            name: contact?.name || phoneNumber,
-            status: 'sent' as const,
-          }
+          return { phoneNumber, name: contact?.name || phoneNumber, status: 'sent' as const }
         })
-        setInvites(newInvites)
+        const fromVendors: Invite[] = selectedVendors.map(v => ({
+          phoneNumber: v.phoneNumber,
+          name: v.name,
+          status: 'sent' as const,
+        }))
+        setInvites([...fromContacts, ...fromVendors])
         setSent(true)
         setSelectedContacts(new Set())
+        setSelectedVendors([])
       } else {
         const errorMessage =
           (response && typeof response === 'object' && response.error)
@@ -271,7 +327,7 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
 
         <h2 className="text-xl font-bold mb-2">Send Invites</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Select contacts from your phone that are registered in ɃU app. Only registered users will be shown.
+          Invite guests from your BU contacts and invite vendors so they can create a gateway for this event.
         </p>
 
         {/* Event Selection */}
@@ -317,13 +373,14 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
           </Card>
         )}
 
-        {/* Search */}
+        {/* Search guests */}
         <Card className="border-primary/20 bg-card p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-2">Guests (BU contacts)</h3>
           <div className="flex items-center gap-3">
             <Search className="h-5 w-5 text-primary" />
             <Input
               type="text"
-              placeholder="Search contacts by name or phone number"
+              placeholder="Search by name or phone number"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-secondary text-foreground placeholder:text-muted-foreground"
@@ -332,17 +389,19 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         </Card>
 
         {/* Selected Count and Default Seat Category */}
-        {selectedContacts.size > 0 && (
+        {(selectedContacts.size > 0 || selectedVendors.length > 0) && (
           <Card className="border-primary/20 bg-primary/5 p-3 mb-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
-                  {selectedContacts.size} contact{selectedContacts.size !== 1 ? 's' : ''} selected
+                  {selectedContacts.size + selectedVendors.length} invitee{selectedContacts.size + selectedVendors.length !== 1 ? 's' : ''} selected
+                  {selectedVendors.length > 0 && ` (${selectedVendors.length} vendor${selectedVendors.length !== 1 ? 's' : ''})`}
                 </span>
                 <Button
                   onClick={() => {
                     setSelectedContacts(new Set())
                     setContactSeatCategories(new Map())
+                    setSelectedVendors([])
                   }}
                   variant="outline"
                   size="sm"
@@ -444,13 +503,85 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
           )}
         </div>
 
+        {/* Invite vendors - so they can create a gateway for this event */}
+        <Card className="border-primary/20 bg-card p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+            <Store className="h-4 w-4 text-primary" />
+            Invite vendors
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Vendors you invite can create a payment gateway for this event after they accept.
+          </p>
+          {vendorContacts.length > 0 && (
+            <div className="space-y-2 mb-3">
+              <span className="text-xs font-medium text-muted-foreground">Vendors in your BU contacts</span>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {vendorContacts.map((c) => {
+                  const selected = isVendorSelected(c.userId!)
+                  return (
+                    <Card
+                      key={c.userId}
+                      className={`border-border/50 p-3 cursor-pointer transition ${selected ? 'border-primary/50 bg-primary/5' : 'hover:bg-card/80'}`}
+                      onClick={() => toggleVendor(c)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`rounded-full h-8 w-8 flex items-center justify-center ${selected ? 'bg-primary/20' : 'bg-secondary'}`}>
+                            {selected ? <CheckCircle className="h-4 w-4 text-primary" /> : <Store className="h-4 w-4 text-muted-foreground" />}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{c.name}</p>
+                            <p className="text-xs text-muted-foreground">{c.phoneNumber}</p>
+                          </div>
+                        </div>
+                        {selected && <CheckCircle className="h-5 w-5 text-primary" />}
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          <div>
+            <span className="text-xs font-medium text-muted-foreground block mb-2">Add vendor by phone number</span>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Vendor's BU phone number"
+                value={vendorPhoneInput}
+                onChange={(e) => { setVendorPhoneInput(e.target.value); setVendorLookupError(null) }}
+                className="bg-secondary flex-1"
+              />
+              <Button variant="outline" onClick={handleVendorLookup} disabled={vendorLookupLoading}>
+                {vendorLookupLoading ? '...' : 'Add'}
+              </Button>
+            </div>
+            {vendorLookupError && <p className="text-xs text-destructive mt-1">{vendorLookupError}</p>}
+          </div>
+          {selectedVendors.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border/50">
+              <span className="text-xs font-medium text-muted-foreground block mb-2">Selected vendors</span>
+              <div className="flex flex-wrap gap-2">
+                {selectedVendors.map((v) => (
+                  <span
+                    key={v.userId}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-xs"
+                  >
+                    {v.name}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removeVendor(v.userId) }} className="hover:text-destructive">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+
         {/* Send Button */}
         <Button
           onClick={handleSendInvites}
-          disabled={selectedContacts.size === 0 || isSending}
+          disabled={(selectedContacts.size === 0 && selectedVendors.length === 0) || isSending}
           className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
         >
-          {isSending ? 'Sending Invites...' : `Send ${selectedContacts.size > 0 ? `${selectedContacts.size} ` : ''}Invite${selectedContacts.size !== 1 ? 's' : ''}`}
+          {isSending ? 'Sending Invites...' : `Send ${selectedContacts.size + selectedVendors.length > 0 ? `${selectedContacts.size + selectedVendors.length} ` : ''}Invite${(selectedContacts.size + selectedVendors.length) !== 1 ? 's' : ''}`}
         </Button>
 
         {/* Inline error from server (e.g. max guests reached) */}
@@ -471,7 +602,7 @@ export default function CelebrantSendInvites({ eventId, onNavigate }: CelebrantS
         {/* Info Card */}
         <Card className="border-border/50 bg-card/50 p-4 mt-4">
           <p className="text-xs text-muted-foreground">
-            💡 Only contacts registered in ɃU app are shown. Unregistered contacts won't appear in this list.
+            💡 Guests are from your BU contacts. Invite vendors so they can set up the payment gateway for this event after accepting.
           </p>
         </Card>
       </div>

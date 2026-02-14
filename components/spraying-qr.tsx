@@ -8,6 +8,7 @@ import { QrCode, CheckCircle, Calendar, MapPin, User, AlertCircle } from 'lucide
 import PinVerification from '@/components/pin-verification'
 import { createNotification } from '@/components/notifications'
 import { transferApi, userApi } from '@/lib/api-client'
+import jsQR from 'jsqr'
 
 interface EventDetails {
   eventId: string
@@ -40,9 +41,11 @@ export default function SprayingQR() {
   const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [transfers, setTransfers] = useState<BUTransfer[]>([])
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const detectorRef = useRef<any>(null)
   const scanningRef = useRef(false)
+  const useJsQRFallback = useRef(false)
 
   const [sprayForm, setSprayForm] = useState({
     amount: '',
@@ -68,7 +71,7 @@ export default function SprayingQR() {
     return () => stopCamera()
   }, [])
 
-  const scanLoop = async () => {
+  const scanLoopBarcodeDetector = async () => {
     if (!scanningRef.current || !videoRef.current || !detectorRef.current) return
     try {
       const detections = await detectorRef.current.detect(videoRef.current)
@@ -84,7 +87,35 @@ export default function SprayingQR() {
       // ignore frame errors
     }
     if (scanningRef.current) {
-      requestAnimationFrame(scanLoop)
+      requestAnimationFrame(scanLoopBarcodeDetector)
+    }
+  }
+
+  const scanLoopJsQR = () => {
+    if (!scanningRef.current || !videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      requestAnimationFrame(scanLoopJsQR)
+      return
+    }
+    const w = video.videoWidth
+    const h = video.videoHeight
+    if (w > 0 && h > 0) {
+      canvas.width = w
+      canvas.height = h
+      ctx.drawImage(video, 0, 0, w, h)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      const code = jsQR(imageData.data, imageData.width, imageData.height)
+      if (code?.data) {
+        handleQRCodeScanned(code.data)
+        stopCamera()
+        return
+      }
+    }
+    if (scanningRef.current) {
+      requestAnimationFrame(scanLoopJsQR)
     }
   }
 
@@ -95,26 +126,58 @@ export default function SprayingQR() {
       return
     }
     try {
+      // 1. Request camera permission and get stream
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       })
       streamRef.current = stream
       setCameraPermission('granted')
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
+
+      const video = videoRef.current
+      if (!video) {
+        stream.getTracks().forEach((t) => t.stop())
+        setCameraError('Video element not ready.')
+        return
       }
+
+      video.srcObject = stream
+      // 2. Wait for video to be ready so the camera feed actually shows and has dimensions
+      await new Promise<void>((resolve, reject) => {
+        video.onloadeddata = () => resolve()
+        video.onerror = () => reject(new Error('Video failed to load'))
+        video.play().catch(reject)
+      })
+
       setCameraActive(true)
+
       if ('BarcodeDetector' in window) {
-        detectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
-        scanningRef.current = true
-        requestAnimationFrame(scanLoop)
+        try {
+          detectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
+          useJsQRFallback.current = false
+          scanningRef.current = true
+          requestAnimationFrame(scanLoopBarcodeDetector)
+        } catch {
+          useJsQRFallback.current = true
+          scanningRef.current = true
+          requestAnimationFrame(scanLoopJsQR)
+        }
       } else {
-        setCameraError('QR scanning not supported in this browser. Use "Simulate Scan (Demo)" or try another browser.')
+        useJsQRFallback.current = true
+        scanningRef.current = true
+        requestAnimationFrame(scanLoopJsQR)
       }
     } catch (err: any) {
       setCameraPermission('denied')
-      setCameraError(err?.message || 'Could not access camera. Allow camera permission in settings or use "Simulate Scan (Demo)".')
+      const msg = err?.message || err?.name || 'Could not access camera.'
+      setCameraError(
+        msg.includes('Permission') || msg.includes('denied') || msg.includes('NotAllowed')
+          ? 'Camera permission denied. Allow camera access in your browser or device settings to scan QR codes.'
+          : `${msg} Use "Simulate Scan (Demo)" if you can\'t use the camera.`
+      )
     }
   }
 
@@ -330,7 +393,7 @@ export default function SprayingQR() {
           <div className="px-4">
             <h2 className="text-xl font-bold mb-4">Scan Event QR Code</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              Scan the QR code provided by the vendor at the event to link to the celebration and send ɃU directly to the celebrant's wallet.
+              Scan the QR code provided by the vendor at the event to link to the celebration and send ɃU directly to the celebrant&apos;s wallet.
             </p>
 
             {/* QR Scanner Area */}
@@ -342,11 +405,14 @@ export default function SprayingQR() {
                       <QrCode className="h-24 w-24 text-primary/50 mx-auto" />
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    You&apos;ll be asked to allow camera access. The camera will open so you can point it at the event QR code.
+                  </p>
                   <Button
                     onClick={startCamera}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
                   >
-                    Start QR Scanner
+                    Allow camera & scan QR code
                   </Button>
                   {cameraError && (
                     <p className="text-xs text-destructive text-center">{cameraError}</p>
@@ -373,6 +439,11 @@ export default function SprayingQR() {
                       autoPlay
                       playsInline
                       muted
+                    />
+                    <canvas
+                      ref={canvasRef}
+                      className="absolute top-0 left-0 w-0 h-0 opacity-0 pointer-events-none"
+                      aria-hidden
                     />
                     <div className="absolute inset-0 border-4 border-primary/50 pointer-events-none">
                       <div className="absolute inset-4 border border-dashed border-primary/30" />

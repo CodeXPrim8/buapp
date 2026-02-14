@@ -148,7 +148,7 @@ export default function Home() {
     } else if (mode === 'vendor') {
       // Vendor mode accessible if registered as vendor, both, admin, or superadmin
       if (currentUser?.role === 'vendor' || currentUser?.role === 'both' || currentUser?.role === 'admin' || currentUser?.role === 'superadmin') {
-        return ['wallet', 'spraying', 'vendor-gateway-setup', 'vendor-buyback', 'vendor-create-event'].includes(page)
+        return ['wallet', 'spraying', 'vendor-gateway-setup', 'vendor-buyback', 'vendor-create-event', 'invites'].includes(page)
       }
       return false
     }
@@ -227,7 +227,7 @@ export default function Home() {
               {currentPage === 'notifications' && <Notifications onNavigate={handleNavigate} />}
               {currentPage === 'buy-bu' && <BuyBU />}
               {currentPage === 'history' && <History />}
-              {currentPage === 'invites' && <Invites />}
+              {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
               {currentPage === 'events' && <EventsTickets onNavigate={handleNavigate} initialData={pageData} />}
               {currentPage === 'event-info' && <EventInfo eventId={pageData} onNavigate={handleNavigate} />}
               {currentPage === 'send-bu' && <SendBU initialData={pageData} onNavigate={handleNavigate} />}
@@ -274,7 +274,8 @@ export default function Home() {
               {currentPage === 'wallet' && <VendorPOS onNavigate={handleNavigate} />}
               {currentPage === 'spraying' && <QRScanner mode={mode} />}
               {currentPage === 'notifications' && <Notifications onNavigate={handleNavigate} />}
-              {currentPage === 'vendor-gateway-setup' && <VendorGatewaySetup onNavigate={handleNavigate} />}
+              {currentPage === 'vendor-gateway-setup' && <VendorGatewaySetup onNavigate={handleNavigate} initialEventId={pageData?.eventId} />}
+              {currentPage === 'invites' && <Invites onNavigate={handleNavigate} />}
               {currentPage === 'vendor-buyback' && <VendorBuyback onNavigate={handleNavigate} />}
               {currentPage === 'vendor-create-event' && <VendorCreateEvent onNavigate={handleNavigate} />}
               {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}

@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Calendar, MapPin, CheckCircle, Clock, QrCode, Download } from 'lucide-react'
+import { Calendar, MapPin, CheckCircle, Clock, QrCode, Download, Link2 } from 'lucide-react'
 import { invitesApi } from '@/lib/api-client'
 import BULoading from '@/components/bu-loading'
 
 interface Invite {
   id: string
+  eventId?: string
   eventName: string
   eventDate: string
   location?: string
@@ -20,7 +21,11 @@ interface Invite {
   qr_code_data?: any
 }
 
-export default function Invites() {
+interface InvitesProps {
+  onNavigate?: (page: string, data?: any) => void
+}
+
+export default function Invites({ onNavigate }: InvitesProps) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -65,6 +70,7 @@ export default function Invites() {
             
             return {
               id: inv.id,
+              eventId: inv.event?.id,
               eventName: inv.event?.name || 'Event',
               eventDate: formattedDate,
               location: inv.event?.location || undefined,
@@ -265,10 +271,22 @@ export default function Invites() {
               )}
 
               {invite.status === 'accepted' && (
-                <div className="flex items-center gap-2 text-green-400">
-                  <CheckCircle className="h-4 w-4" />
-                  <span className="text-sm">Invitation accepted</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-2 text-green-400">
+                    <CheckCircle className="h-4 w-4" />
+                    <span className="text-sm">Invitation accepted</span>
+                  </div>
+                  {onNavigate && invite.eventId && (
+                    <Button
+                      onClick={() => onNavigate('vendor-gateway-setup', { eventId: invite.eventId })}
+                      variant="outline"
+                      className="w-full mt-3 border-primary/30 text-primary"
+                    >
+                      <Link2 className="h-4 w-4 mr-2" />
+                      Create gateway for this event
+                    </Button>
+                  )}
+                </>
               )}
             </Card>
             ))

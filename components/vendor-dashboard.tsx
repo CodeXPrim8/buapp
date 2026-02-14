@@ -309,6 +309,22 @@ export default function VendorDashboard({ onNavigate }: VendorDashboardProps) {
             </div>
           )}
 
+          {/* Event Invites - create gateway from celebrant invite */}
+          <Card
+            className="border-primary/20 bg-primary/5 p-4 cursor-pointer transition hover:bg-primary/10"
+            onClick={() => onNavigate?.('invites')}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold">My Invites</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  View invites from celebrants and create gateways for events you&apos;re invited to
+                </p>
+              </div>
+              <Ticket className="h-5 w-5 text-primary" />
+            </div>
+          </Card>
+
           {/* Quick Actions */}
           <div className="grid grid-cols-2 gap-3">
             <Button 

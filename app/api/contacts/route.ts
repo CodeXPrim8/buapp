@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
           id,
           phone_number,
           first_name,
-          last_name
+          last_name,
+          role
         )
       `)
       .eq('user_id', authUser.userId)
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       last_name: c.contact?.last_name,
       name: `${c.contact?.first_name || ''} ${c.contact?.last_name || ''}`.trim(),
       last_transaction_at: c.last_transaction_at,
+      role: c.contact?.role || 'user',
     })) || []
 
     return successResponse({ contacts: formattedContacts })

@@ -11,9 +11,10 @@ import BULoading from '@/components/bu-loading'
 interface VendorGatewaySetupProps {
   onNavigate?: (page: string, data?: any) => void
   onGatewayCreated?: (gateway: any) => void
+  initialEventId?: string
 }
 
-export default function VendorGatewaySetup({ onNavigate, onGatewayCreated }: VendorGatewaySetupProps) {
+export default function VendorGatewaySetup({ onNavigate, onGatewayCreated, initialEventId }: VendorGatewaySetupProps) {
   const [linkMode, setLinkMode] = useState<'existing' | 'manual'>('existing') // 'existing' = link to event, 'manual' = manual entry
   const [formData, setFormData] = useState({
     eventId: '', // Selected event ID
@@ -39,7 +40,7 @@ export default function VendorGatewaySetup({ onNavigate, onGatewayCreated }: Ven
         setLoadingEvents(true)
         try {
           // Fetch all events (vendors can see events to link to)
-          const response = await eventsApi.list({ my_events: true }) // Vendor sees only their own events for linking gateways
+          const response = await eventsApi.list({ for_gateway_link: true }) // Vendor sees their events + events they're invited to
           if (response.success && response.data?.events) {
             // Transform events with celebrant info
             const eventsWithCelebrants = response.data.events.map((event: any) => ({
@@ -65,6 +66,24 @@ export default function VendorGatewaySetup({ onNavigate, onGatewayCreated }: Ven
 
     fetchEvents()
   }, [linkMode])
+
+  // Pre-select event when opened from Invites (Create gateway for this event)
+  useEffect(() => {
+    if (initialEventId && availableEvents.length > 0) {
+      const event = availableEvents.find(e => e.id === initialEventId)
+      if (event) {
+        setFormData(prev => ({
+          ...prev,
+          eventId: event.id,
+          eventName: event.name,
+          eventDate: event.date,
+          eventLocation: event.location || '',
+          celebrantUniqueId: event.celebrant_phone,
+          celebrantName: event.celebrant_name,
+        }))
+      }
+    }
+  }, [initialEventId, availableEvents])
 
   // Handle event selection
   const handleEventSelect = (eventId: string) => {

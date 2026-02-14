@@ -214,6 +214,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const aroundMe = searchParams.get('around_me') === 'true'
     const myEvents = searchParams.get('my_events') === 'true'
+    const forGatewayLink = searchParams.get('for_gateway_link') === 'true'
 
     let query = supabase
       .from('events')
@@ -242,7 +243,24 @@ export async function GET(request: NextRequest) {
     }
 
     if (role === 'vendor' || role === 'both') {
-      if (aroundMe) {
+      if (forGatewayLink) {
+        // Events the vendor can link a gateway to: own events (as celebrant) + events they're invited to (accepted)
+        const { data: invitedRows } = await supabase
+          .from('invites')
+          .select('event_id')
+          .eq('guest_id', dbUserId)
+          .eq('status', 'accepted')
+        const invitedEventIds = invitedRows?.map((r: { event_id: string }) => r.event_id).filter(Boolean) || []
+        const { data: myEventRows } = await supabase.from('events').select('id').eq('celebrant_id', dbUserId).eq('is_around_me', false)
+        const myIds = myEventRows?.map((r: { id: string }) => r.id) || []
+        const invitedIds = invitedEventIds.filter((id): id is string => !!id)
+        const mergeIds = [...new Set([...myIds, ...invitedIds])]
+        if (mergeIds.length === 0) {
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+        } else {
+          query = query.in('id', mergeIds).eq('is_around_me', false)
+        }
+      } else if (aroundMe) {
         query = query.eq('is_around_me', true)
       } else if (myEvents) {
         query = query.eq('celebrant_id', dbUserId).eq('is_around_me', false)
