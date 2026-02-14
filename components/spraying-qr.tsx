@@ -122,7 +122,7 @@ export default function SprayingQR() {
   const startCamera = async () => {
     setCameraError('')
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Camera is not supported on this device. Use "Simulate Scan (Demo)" below.')
+      setCameraError('Camera is not supported on this device.')
       return
     }
     try {
@@ -176,54 +176,12 @@ export default function SprayingQR() {
       setCameraError(
         msg.includes('Permission') || msg.includes('denied') || msg.includes('NotAllowed')
           ? 'Camera permission denied. Allow camera access in your browser or device settings to scan QR codes.'
-          : `${msg} Use "Simulate Scan (Demo)" if you can\'t use the camera.`
+          : msg
       )
     }
   }
 
-  const simulateQRScan = async () => {
-    // Try to load gateways from API first
-    try {
-      const { gatewayApi } = await import('@/lib/api-client')
-      const response = await gatewayApi.list()
-      
-      if (response.success && response.data?.gateways && response.data.gateways.length > 0) {
-        // Use first active gateway for demo (in production, this would be the actual scanned QR)
-        const gateway = response.data.gateways.find((g: any) => g.status === 'active') || response.data.gateways[0]
-        const gatewayQRData = {
-          type: 'gateway',
-          gatewayId: gateway.id,
-          eventName: gateway.event_name,
-          celebrantUniqueId: gateway.celebrant_unique_id,
-          celebrantName: gateway.celebrant_name,
-        }
-        setScannedData(JSON.stringify(gatewayQRData))
-        // Convert gateway data to event details format
-        setEventDetails({
-          eventId: gateway.id, // Use gateway ID as event ID
-          eventName: gateway.event_name,
-          celebrantName: gateway.celebrant_name,
-          celebrantWalletId: gateway.celebrant_unique_id,
-          eventDate: gateway.event_date,
-          location: gateway.event_location,
-          vendorName: 'Vendor',
-          gatewayId: gateway.id, // Store gateway ID
-        })
-        setMode('details')
-        setCameraActive(false)
-        return
-      }
-    } catch (error) {
-      console.error('Failed to load gateways from API:', error)
-    }
-
-    // No gateways found - show error
-    alert('No active gateway found. Please ensure a gateway is set up and active.')
-    setMode('menu')
-    setCameraActive(false)
-  }
-
-  // Handle actual QR scan (for production)
+  // Handle QR scan from camera
   const handleQRCodeScanned = async (qrData: string) => {
     try {
       const parsed = JSON.parse(qrData)
@@ -396,10 +354,36 @@ export default function SprayingQR() {
               Scan the QR code provided by the vendor at the event to link to the celebration and send ɃU directly to the celebrant&apos;s wallet.
             </p>
 
-            {/* QR Scanner Area */}
+            {/* QR Scanner Area - video/canvas always in DOM so refs are set before startCamera */}
             <Card className="border-primary/20 bg-card p-6 mb-4">
+              <div
+                className={`relative overflow-hidden rounded-lg bg-black ${cameraActive ? 'aspect-square' : 'h-[2px] w-[2px] min-w-0 min-h-0 opacity-0 pointer-events-none'}`}
+              >
+                <video
+                  ref={videoRef}
+                  className="h-full w-full object-cover"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 w-0 h-0 opacity-0 pointer-events-none"
+                  aria-hidden
+                />
+                {cameraActive && (
+                  <>
+                    <div className="absolute inset-0 border-4 border-primary/50 pointer-events-none">
+                      <div className="absolute inset-4 border border-dashed border-primary/30" />
+                    </div>
+                    <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white bg-black/50 px-2 py-1 rounded">
+                      Point camera at event QR code
+                    </p>
+                  </>
+                )}
+              </div>
               {!cameraActive ? (
-                <div className="space-y-4">
+                <div className="space-y-4 mt-4">
                   <div className="flex justify-center">
                     <div className="rounded-lg bg-foreground/5 p-8 border-2 border-dashed border-primary/30">
                       <QrCode className="h-24 w-24 text-primary/50 mx-auto" />
@@ -422,52 +406,15 @@ export default function SprayingQR() {
                       Allow camera in your browser or device settings to scan QR codes.
                     </p>
                   )}
-                  <Button
-                    onClick={simulateQRScan}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Simulate Scan (Demo)
-                  </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="relative aspect-square overflow-hidden rounded-lg bg-black">
-                    <video
-                      ref={videoRef}
-                      className="h-full w-full object-cover"
-                      autoPlay
-                      playsInline
-                      muted
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      className="absolute top-0 left-0 w-0 h-0 opacity-0 pointer-events-none"
-                      aria-hidden
-                    />
-                    <div className="absolute inset-0 border-4 border-primary/50 pointer-events-none">
-                      <div className="absolute inset-4 border border-dashed border-primary/30" />
-                    </div>
-                    <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white bg-black/50 px-2 py-1 rounded">
-                      Point camera at event QR code
-                    </p>
-                  </div>
+                <div className="space-y-4 mt-4">
                   <Button
                     onClick={stopCamera}
                     variant="outline"
                     className="w-full"
                   >
                     Stop camera
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      stopCamera()
-                      simulateQRScan()
-                    }}
-                    variant="ghost"
-                    className="w-full text-sm text-muted-foreground"
-                  >
-                    Use demo scan instead
                   </Button>
                 </div>
               )}
