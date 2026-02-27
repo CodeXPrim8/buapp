@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { apiCall } from '@/lib/api-client'
 
 type Status = 'idle' | 'verifying' | 'success' | 'error'
 
-export default function PaystackCallbackPage() {
+function PaystackCallbackContent() {
   const searchParams = useSearchParams()
   const reference = useMemo(() => {
     return searchParams.get('reference') || searchParams.get('trxref') || ''
@@ -90,5 +90,17 @@ export default function PaystackCallbackPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PaystackCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-slate-900 flex items-center justify-center">
+        <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+      </div>
+    }>
+      <PaystackCallbackContent />
+    </Suspense>
   )
 }
