@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   generator: 'ɃU',
   icons: {
     icon: [
+      { url: '/icon.png', sizes: 'any' },
       {
         url: '/icon-light-32x32.png',
         media: '(prefers-color-scheme: light)',

@@ -292,6 +292,12 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
     }
   }
 
+  const handleOpenPrivacy = () => {
+    setShowSettingsModal(false)
+    setPinForm({ currentPin: '', newPin: '', confirmPin: '' })
+    onNavigate?.('privacy')
+  }
+
   return (
     <div className="space-y-6 pb-24">
       {/* Profile Header */}
@@ -658,6 +664,21 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
                   <p>• Use a unique PIN that you don't use elsewhere</p>
                   <p>• Change your PIN regularly for better security</p>
                 </div>
+              </div>
+
+              {/* Privacy */}
+              <div className="border-t border-border pt-4">
+                <h4 className="font-semibold mb-2">Privacy</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Learn how we collect, use, and protect your information.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleOpenPrivacy}
+                >
+                  View Privacy Policy
+                </Button>
               </div>
 
               <div className="pt-2">

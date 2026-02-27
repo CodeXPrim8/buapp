@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Dashboard from '@/components/dashboard'
 import Profile from '@/components/profile'
+import Privacy from '@/components/privacy'
 import Notifications from '@/components/notifications'
 import Wallet from '@/components/wallet'
 import PaystackPayment from '@/components/paystack-payment'
@@ -130,7 +131,7 @@ export default function Home() {
 
   // Role-based access control function (must be defined before hooks)
   const canAccessPage = (page: string) => {
-    if (page === 'dashboard' || page === 'profile' || page === 'notifications') return true
+    if (page === 'dashboard' || page === 'profile' || page === 'notifications' || page === 'privacy') return true
     
     // Guest and Celebrant modes are accessible to 'user', 'celebrant', 'both', 'admin', and 'superadmin' registered roles
     if (mode === 'user') {
@@ -224,6 +225,7 @@ export default function Home() {
                 eventWithdrawn={pageData?.eventWithdrawn}
               />}
               {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
+              {currentPage === 'privacy' && <Privacy onNavigate={handleNavigate} />}
               {currentPage === 'notifications' && <Notifications onNavigate={handleNavigate} />}
               {currentPage === 'buy-bu' && <BuyBU />}
               {currentPage === 'history' && <History />}
@@ -267,6 +269,7 @@ export default function Home() {
               {currentPage === 'celebrant-create-event' && <CelebrantCreateEvent onNavigate={handleNavigate} />}
               {currentPage === 'celebrant-send-invites' && <CelebrantSendInvites eventId={pageData} onNavigate={handleNavigate} />}
               {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
+              {currentPage === 'privacy' && <Privacy onNavigate={handleNavigate} />}
             </>
           ) : (
             <>
@@ -279,6 +282,7 @@ export default function Home() {
               {currentPage === 'vendor-buyback' && <VendorBuyback onNavigate={handleNavigate} />}
               {currentPage === 'vendor-create-event' && <VendorCreateEvent onNavigate={handleNavigate} />}
               {currentPage === 'profile' && <Profile onNavigate={handleNavigate} onLogout={handleLogout} theme={theme} />}
+              {currentPage === 'privacy' && <Privacy onNavigate={handleNavigate} />}
             </>
           )}
         </div>

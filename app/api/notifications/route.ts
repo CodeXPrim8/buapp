@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
       .limit(100)
 
     if (error) {
-      return errorResponse('Failed to fetch notifications', 500)
+      console.error('Failed to fetch notifications:', error)
+      const errorDetails = [error.message, error.details, error.hint].filter(Boolean).join(' | ')
+      return errorResponse(`Failed to fetch notifications: ${errorDetails || 'Unknown error'}`, 500)
     }
 
     const list = Array.isArray(notifications) ? notifications : []
@@ -58,7 +60,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error || !notification) {
-      return errorResponse('Failed to create notification', 500)
+      if (error) {
+        console.error('Failed to create notification:', error)
+      }
+      const errorDetails = error ? [error.message, error.details, error.hint].filter(Boolean).join(' | ') : ''
+      return errorResponse(`Failed to create notification: ${errorDetails || 'Unknown error'}`, 500)
     }
 
     void sendPushToUser(notification.user_id, {
