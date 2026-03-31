@@ -61,6 +61,16 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
   console.log('getUserByPhone - Input:', phoneNumber)
   console.log('getUserByPhone - Formats to try:', formatsToTry)
 
+  const isConnectivityError = (message?: string, details?: string) => {
+    const text = `${message || ''} ${details || ''}`.toLowerCase()
+    return (
+      text.includes('fetch failed') ||
+      text.includes('enotfound') ||
+      text.includes('eai_again') ||
+      text.includes('network')
+    )
+  }
+
   // #region agent log
   writeLog({location:'auth.ts:45',message:'Starting phone number lookup',data:{inputPhone:phoneNumber?.substring(0,5)+'***',formatsToTry:formatsToTry},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
   // #endregion
@@ -85,6 +95,11 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
           details: error.details,
           hint: error.hint
         })
+        // Surface infrastructure/connectivity failures so the API returns 5xx,
+        // not a misleading 401 invalid-credentials response.
+        if (isConnectivityError(error.message, error.details || undefined)) {
+          throw new Error(`Supabase connectivity error: ${error.message}`)
+        }
         // If it's a permission error (RLS), log it but continue trying other formats
         if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
           console.error('[getUserByPhone] ⚠️ RLS/Permission error detected. Service role key may be needed.')
@@ -103,6 +118,9 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
     } catch (queryError: any) {
       console.error(`[getUserByPhone] Exception querying format ${format.substring(0, 5)}***:`, queryError)
       writeLog({location:'auth.ts:85',message:'Query exception',data:{format:format?.substring(0,5)+'***',error:queryError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'});
+      if (isConnectivityError(queryError?.message, queryError?.details)) {
+        throw new Error(`Supabase connectivity error: ${queryError?.message || 'unknown error'}`)
+      }
       continue
     }
   }

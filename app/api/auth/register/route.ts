@@ -7,8 +7,19 @@ import { rateLimiters } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimiters.registration(request)
+    const forwarded =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip')?.trim() ||
+      request.headers.get('cf-connecting-ip')?.trim()
+
+    let rateLimitResult: { allowed: boolean; remaining: number; resetTime: number } = {
+      allowed: true,
+      remaining: Number.MAX_SAFE_INTEGER,
+      resetTime: Date.now(),
+    }
+    if (forwarded) {
+      rateLimitResult = await rateLimiters.registration(request)
+    }
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
         {
@@ -156,7 +167,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('bu-auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     })

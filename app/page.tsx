@@ -35,6 +35,9 @@ import VendorBuyback from '@/components/vendor-buyback'
 import Auth from '@/components/auth'
 
 export default function Home() {
+  const AUTH_SESSION_KEY = 'auth-session-active'
+  const AUTH_LAST_ACTIVE_KEY = 'auth-last-active'
+  const SESSION_TIMEOUT_MS = 5 * 60 * 1000
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [pageData, setPageData] = useState<any>(null)
   const [theme, setTheme] = useState('theme-pink')
@@ -56,9 +59,59 @@ export default function Home() {
       const savedTheme = localStorage.getItem('bison-theme') || 'theme-pink'
       setTheme(savedTheme)
       
-      // Check authentication via API (JWT cookie)
+      const touchActivity = () => {
+        sessionStorage.setItem(AUTH_LAST_ACTIVE_KEY, Date.now().toString())
+      }
+
+      const clearSession = () => {
+        sessionStorage.removeItem(AUTH_SESSION_KEY)
+        sessionStorage.removeItem(AUTH_LAST_ACTIVE_KEY)
+      }
+
+      // Force re-login on app reload/return
+      const handleBeforeUnload = () => {
+        clearSession()
+      }
+      window.addEventListener('beforeunload', handleBeforeUnload)
+
+      const isSessionValid = () => {
+        const active = sessionStorage.getItem(AUTH_SESSION_KEY) === 'true'
+        const lastActive = Number(sessionStorage.getItem(AUTH_LAST_ACTIVE_KEY) || '0')
+        if (!active || !lastActive) return false
+        return Date.now() - lastActive <= SESSION_TIMEOUT_MS
+      }
+
+      const ensureLoggedOut = async () => {
+        clearSession()
+        try {
+          const { authApi } = await import('@/lib/api-client')
+          await authApi.logout()
+        } catch (error) {
+          // ignore
+        }
+      }
+
+      const handleVisibilityChange = () => {
+        if (document.hidden) return
+        if (!isSessionValid()) {
+          handleLogout()
+        } else {
+          touchActivity()
+        }
+      }
+
+      window.addEventListener('focus', handleVisibilityChange)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('click', touchActivity)
+      window.addEventListener('keydown', touchActivity)
+
+      // Check authentication via API (JWT cookie) only if session is still valid
       const checkAuth = async () => {
         try {
+          if (!isSessionValid()) {
+            await ensureLoggedOut()
+            return
+          }
           const { userApi } = await import('@/lib/api-client')
           const response = await userApi.getMe()
           
@@ -73,11 +126,11 @@ export default function Home() {
             })
             // Set initial mode: Guest for 'user', 'celebrant', 'admin', 'superadmin' roles, Vendor for 'vendor' and 'both' roles
             setMode(user.role === 'vendor' || user.role === 'both' ? 'vendor' : 'user')
+            touchActivity()
           } else {
             // Not authenticated (401 or other error) - clear any stale sessionStorage
             // This is expected when user is not logged in, so we handle it silently
-            sessionStorage.removeItem('userRole')
-            sessionStorage.removeItem('userName')
+            await ensureLoggedOut()
           }
         } catch (error: any) {
           // Not authenticated or error - handle silently
@@ -85,12 +138,19 @@ export default function Home() {
           if (error?.status !== 401) {
             console.error('Auth check error:', error)
           }
-          sessionStorage.removeItem('userRole')
-          sessionStorage.removeItem('userName')
+          await ensureLoggedOut()
         }
       }
       
       checkAuth()
+
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload)
+        window.removeEventListener('focus', handleVisibilityChange)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        window.removeEventListener('click', touchActivity)
+        window.removeEventListener('keydown', touchActivity)
+      }
     }
   }, [])
   
@@ -100,6 +160,10 @@ export default function Home() {
             // Set initial mode: Guest for 'user', 'celebrant', 'admin', 'superadmin' roles, Vendor for 'vendor' and 'both' roles
             setMode(user.role === 'vendor' || user.role === 'both' ? 'vendor' : 'user')
     setCurrentPage('dashboard')
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(AUTH_SESSION_KEY, 'true')
+      sessionStorage.setItem(AUTH_LAST_ACTIVE_KEY, Date.now().toString())
+    }
   }
   
   const handleLogout = async () => {
@@ -115,6 +179,8 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('userRole')
       sessionStorage.removeItem('userName')
+      sessionStorage.removeItem(AUTH_SESSION_KEY)
+      sessionStorage.removeItem(AUTH_LAST_ACTIVE_KEY)
     }
     
     setIsAuthenticated(false)

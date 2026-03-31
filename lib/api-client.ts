@@ -100,6 +100,7 @@ export async function apiCall<T = any>(
   try {
     const fetchInit: RequestInit = {
       ...fetchOptions,
+      credentials: fetchOptions.credentials ?? 'include',
       headers: requestHeaders,
     }
     if (method === 'GET' && (endpoint === '/wallets/me' || endpoint.startsWith('/wallets/me?'))) {
@@ -188,11 +189,6 @@ export async function apiCall<T = any>(
         headers: Object.fromEntries(response.headers.entries()),
       }
       
-      // Log error details (but not for 401 - expected when not authenticated)
-      if (response.status !== 401) {
-        console.error(`API Error [${endpoint}]:`, response.status, response.statusText)
-      }
-      
       // If response is empty, log a warning (but not for 401)
       if (responseText.trim() === '' || responseText.trim() === '{}') {
         if (response.status !== 401) {
@@ -270,9 +266,11 @@ export async function apiCall<T = any>(
         status: response.status,
       }
       
-      // Don't log 401 errors (expected when not authenticated)
-      if (response.status !== 401) {
-        // Log the actual error message clearly
+      // Reduce console noise for expected auth/service conditions.
+      if (response.status === 401 || response.status === 503) {
+        console.warn(`API Warning [${endpoint}]:`, response.status, response.statusText)
+        console.warn('Message:', errorMessage)
+      } else {
         console.error(`API Error [${endpoint}]:`, response.status, response.statusText)
         console.error('Error message:', errorMessage)
         if (data?.errors) {
@@ -522,6 +520,7 @@ export const withdrawalsApi = {
     account_name?: string
     wallet_address?: string
     event_id?: string
+    save_bank_details?: boolean
     pin: string
   }) => api.post('/withdrawals', data, true),
 

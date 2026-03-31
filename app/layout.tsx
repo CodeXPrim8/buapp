@@ -12,21 +12,12 @@ export const metadata: Metadata = {
   generator: 'ɃU',
   icons: {
     icon: [
-      { url: '/icon.png', sizes: 'any' },
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
-    apple: '/apple-icon.png',
+    apple: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
   },
 }
 

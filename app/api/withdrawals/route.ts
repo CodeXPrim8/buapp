@@ -51,12 +51,23 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       return errorResponse('Validation failed', 400, validation.errors)
     }
 
-    const { bu_amount, naira_amount, type, bank_name, account_number, account_name, wallet_address, event_id, pin } = body
+    const {
+      bu_amount,
+      naira_amount,
+      type,
+      bank_name,
+      account_number,
+      account_name,
+      wallet_address,
+      event_id,
+      pin,
+      save_bank_details,
+    } = body
 
     // Verify PIN (use pinUserError to avoid duplicate name with dbUserError above)
     const { data: user, error: pinUserError } = await supabase
       .from('users')
-      .select('pin_hash')
+      .select('pin_hash, bank_name, account_number, account_name')
       .eq('id', userId)
       .single()
 
@@ -67,6 +78,17 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
     const pinValid = await verifyPin(pin, user.pin_hash)
     if (!pinValid) {
       return errorResponse('Invalid PIN', 401)
+    }
+
+    const isBankWithdrawal = type === 'bank'
+    const resolvedBankName = isBankWithdrawal ? String(bank_name || user.bank_name || '').trim() : ''
+    const resolvedAccountNumber = isBankWithdrawal ? String(account_number || user.account_number || '').trim() : ''
+    const resolvedAccountName = isBankWithdrawal ? String(account_name || user.account_name || '').trim() : ''
+
+    if (isBankWithdrawal) {
+      if (!resolvedBankName || !resolvedAccountNumber || !resolvedAccountName) {
+        return errorResponse('Bank name, account number, and account name are required', 400)
+      }
     }
 
     // Get wallet balance
@@ -116,7 +138,25 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
       return errorResponse(msg, 400)
     }
 
+    const lockedAt = new Date().toISOString()
+
     // Create withdrawal request
+    const shouldSaveBankDetails = isBankWithdrawal && save_bank_details === true
+    if (shouldSaveBankDetails) {
+      const { error: bankUpdateError } = await supabase
+        .from('users')
+        .update({
+          bank_name: resolvedBankName,
+          account_number: resolvedAccountNumber,
+          account_name: resolvedAccountName,
+        })
+        .eq('id', userId)
+
+      if (bankUpdateError) {
+        console.warn('[withdrawals] Failed to save bank details:', bankUpdateError.message)
+      }
+    }
+
     const { data: withdrawal, error: withdrawalError } = await supabase
       .from('withdrawals')
       .insert([{
@@ -125,10 +165,12 @@ export const POST = withCSRFProtection(async function POST(request: NextRequest)
         bu_amount,
         naira_amount,
         type,
-        bank_name: type === 'bank' ? bank_name : null,
-        account_number: type === 'bank' ? account_number : null,
-        account_name: type === 'bank' ? account_name : null,
+        bank_name: isBankWithdrawal ? resolvedBankName : null,
+        account_number: isBankWithdrawal ? resolvedAccountNumber : null,
+        account_name: isBankWithdrawal ? resolvedAccountName : null,
         wallet_address: type === 'wallet' ? wallet_address : null,
+        funds_locked: true,
+        locked_at: lockedAt,
         status: 'pending',
       }])
       .select()

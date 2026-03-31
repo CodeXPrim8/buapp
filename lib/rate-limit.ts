@@ -75,7 +75,7 @@ export function rateLimit(options: RateLimitOptions) {
 
 function getDefaultKey(request: Request): string {
   // Use IP address and user ID if available
-  const ip = request.headers.get('x-forwarded-for') || 
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
              request.headers.get('x-real-ip') || 
              'unknown'
   const userId = request.headers.get('x-user-id') || 'anonymous'
@@ -90,10 +90,14 @@ export const rateLimiters = {
     maxRequests: 5,
     windowMs: 15 * 60 * 1000, // 15 minutes
     keyGenerator: (req) => {
-      const ip = req.headers.get('x-forwarded-for') || 
-                 req.headers.get('x-real-ip') || 
-                 'unknown'
-      return `login:${ip}`
+      // Never use User-Agent as the key: popular browsers share identical UAs and would
+      // rate-limit all users together when proxy IP headers are missing.
+      const ip =
+        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        req.headers.get('x-real-ip')?.trim() ||
+        req.headers.get('cf-connecting-ip')?.trim() ||
+        ''
+      return ip ? `login:${ip}` : 'login:__no_ip__'
     },
   }),
   
@@ -122,10 +126,12 @@ export const rateLimiters = {
     maxRequests: 3,
     windowMs: 60 * 60 * 1000, // 1 hour
     keyGenerator: (req) => {
-      const ip = req.headers.get('x-forwarded-for') || 
-                 req.headers.get('x-real-ip') || 
-                 'unknown'
-      return `register:${ip}`
+      const ip =
+        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        req.headers.get('x-real-ip')?.trim() ||
+        req.headers.get('cf-connecting-ip')?.trim() ||
+        ''
+      return ip ? `register:${ip}` : 'register:__no_ip__'
     },
   }),
 }

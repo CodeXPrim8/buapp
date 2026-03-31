@@ -9,6 +9,8 @@ export default function WithdrawalsPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
   const [sendingId, setSendingId] = useState<string | null>(null)
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     fetchWithdrawals()
@@ -32,37 +34,47 @@ export default function WithdrawalsPage() {
   }
 
   const handleUpdateStatus = async (id: string, status: string) => {
-    if (!confirm(`Are you sure you want to mark this withdrawal as ${status}?`)) {
-      return
-    }
-
+    setActionMessage(null)
+    setStatusUpdatingId(id)
     try {
       const response = await adminApi.updateWithdrawal(id, status)
       if (response.success) {
-        fetchWithdrawals()
+        setWithdrawals((prev) =>
+          prev.map((w) =>
+            w.id === id
+              ? {
+                  ...w,
+                  status,
+                  completedAt: status === 'completed' || status === 'failed' ? new Date().toISOString() : w.completedAt,
+                }
+              : w
+          )
+        )
+        setActionMessage({ type: 'success', text: `Marked as ${status}.` })
+        await fetchWithdrawals()
       } else {
-        alert(response.error || 'Failed to update withdrawal')
+        setActionMessage({ type: 'error', text: response.error || 'Failed to update withdrawal' })
       }
     } catch (error: any) {
-      alert(error.message || 'Failed to update withdrawal')
+      setActionMessage({ type: 'error', text: error.message || 'Failed to update withdrawal' })
+    } finally {
+      setStatusUpdatingId(null)
     }
   }
 
   const handleSendPaystack = async (id: string) => {
-    if (!confirm('Send this amount to the user\'s bank account via Paystack? This will mark the withdrawal as completed.')) {
-      return
-    }
+    setActionMessage(null)
     setSendingId(id)
     try {
       const response = await adminApi.sendWithdrawalPaystack(id)
       if (response.success) {
-        fetchWithdrawals()
-        alert('Naira sent successfully. Withdrawal marked completed.')
+        setActionMessage({ type: 'success', text: 'Naira sent successfully. Withdrawal marked completed.' })
+        await fetchWithdrawals()
       } else {
-        alert(response.error || 'Failed to send via Paystack')
+        setActionMessage({ type: 'error', text: response.error || 'Failed to send via Paystack' })
       }
     } catch (error: any) {
-      alert(error?.message || 'Failed to send via Paystack')
+      setActionMessage({ type: 'error', text: error?.message || 'Failed to send via Paystack' })
     } finally {
       setSendingId(null)
     }
@@ -76,6 +88,17 @@ export default function WithdrawalsPage() {
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">Manage withdrawal requests</p>
       </div>
+      {actionMessage && (
+        <div
+          className={`rounded-lg border px-4 py-2 text-sm ${
+            actionMessage.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-700'
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}
+        >
+          {actionMessage.text}
+        </div>
+      )}
 
       {/* Filter */}
       <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-xl shadow-lg p-4 border border-gray-200/50 dark:border-gray-700/50">
@@ -158,21 +181,24 @@ export default function WithdrawalsPage() {
                           )}
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'processing')}
-                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-sm"
+                            disabled={statusUpdatingId === w.id}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 text-sm disabled:opacity-50"
                           >
-                            Process
+                            {statusUpdatingId === w.id ? 'Updating…' : 'Process'}
                           </button>
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'completed')}
-                            className="text-green-600 hover:text-green-900 dark:text-green-400 text-sm"
+                            disabled={statusUpdatingId === w.id}
+                            className="text-green-600 hover:text-green-900 dark:text-green-400 text-sm disabled:opacity-50"
                           >
-                            Complete
+                            {statusUpdatingId === w.id ? 'Updating…' : 'Complete'}
                           </button>
                           <button
                             onClick={() => handleUpdateStatus(w.id, 'failed')}
-                            className="text-red-600 hover:text-red-900 dark:text-red-400 text-sm"
+                            disabled={statusUpdatingId === w.id}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 text-sm disabled:opacity-50"
                           >
-                            Reject
+                            {statusUpdatingId === w.id ? 'Updating…' : 'Reject'}
                           </button>
                         </div>
                       )}

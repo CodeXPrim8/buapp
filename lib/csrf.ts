@@ -15,7 +15,7 @@ export function setCSRFToken(response: NextResponse): string {
   response.cookies.set(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false, // Must be readable by JavaScript
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24, // 24 hours
     path: '/',
   })

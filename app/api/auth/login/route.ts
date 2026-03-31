@@ -35,8 +35,23 @@ export async function POST(request: NextRequest) {
       anonKeyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length || 0
     })
     
-    // Apply rate limiting
-    const rateLimitResult = await rateLimiters.login(request)
+    // Apply rate limiting in production only.
+    // In local/dev, missing proxy IP headers can collapse all attempts into one key.
+    let rateLimitResult: { allowed: boolean; remaining: number; resetTime: number } = {
+      allowed: true,
+      remaining: Number.MAX_SAFE_INTEGER,
+      resetTime: Date.now(),
+    }
+    if (process.env.NODE_ENV === 'production') {
+      const forwarded =
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        request.headers.get('x-real-ip')?.trim() ||
+        request.headers.get('cf-connecting-ip')?.trim()
+      // Skip login rate limit when no client IP is available (avoids one shared bucket for everyone).
+      if (forwarded) {
+        rateLimitResult = await rateLimiters.login(request)
+      }
+    }
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
         {
@@ -96,6 +111,20 @@ export async function POST(request: NextRequest) {
       // #endregion
     } catch (error: any) {
       console.error('Error fetching user during login:', error)
+      const errorText = String(error?.message || error || '').toLowerCase()
+      const isConnectivityError =
+        errorText.includes('enotfound') ||
+        errorText.includes('fetch failed') ||
+        errorText.includes('network') ||
+        errorText.includes('connectivity')
+
+      if (isConnectivityError) {
+        return errorResponse(
+          'Authentication service is temporarily unavailable. Check your internet/DNS and Supabase URL, then try again.',
+          503
+        )
+      }
+
       return errorResponse('Database error during login. Please try again.', 500)
     }
 
@@ -190,7 +219,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('bu-auth-token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60, // 1 hour (reduced from 7 days)
       path: '/',
     })
@@ -199,7 +228,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('bu-refresh-token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     })
@@ -207,10 +236,12 @@ export async function POST(request: NextRequest) {
     // Set CSRF token
     setCSRFToken(response)
 
-    // Add rate limit headers
-    response.headers.set('X-RateLimit-Limit', '5')
-    response.headers.set('X-RateLimit-Remaining', String(rateLimitResult.remaining))
-    response.headers.set('X-RateLimit-Reset', String(rateLimitResult.resetTime))
+    // Add rate limit headers when rate limiting is active
+    if (process.env.NODE_ENV === 'production') {
+      response.headers.set('X-RateLimit-Limit', '5')
+      response.headers.set('X-RateLimit-Remaining', String(rateLimitResult.remaining))
+      response.headers.set('X-RateLimit-Reset', String(rateLimitResult.resetTime))
+    }
 
     return response
   } catch (error: any) {

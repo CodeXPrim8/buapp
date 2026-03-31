@@ -95,6 +95,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
       const user = response.data.user
       const fullName = `${user.first_name} ${user.last_name}`.trim()
+      const firstName = (user.first_name || fullName).trim().split(/\s+/)[0] || ''
 
       // Store user data in localStorage for session management
       // Don't store sensitive data in localStorage
@@ -102,7 +103,18 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
       // Store only minimal non-sensitive data in sessionStorage (cleared on tab close)
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('userRole', user.role)
-        sessionStorage.setItem('userName', fullName)
+        sessionStorage.setItem('userName', firstName)
+        sessionStorage.setItem('userFullName', fullName || firstName)
+        sessionStorage.setItem('userPhone', user.phone_number || '')
+        if (user.bank_name || user.bankName) {
+          sessionStorage.setItem('userBankName', user.bank_name || user.bankName)
+        }
+        if (user.account_number || user.accountNumber) {
+          sessionStorage.setItem('userAccountNumber', user.account_number || user.accountNumber)
+        }
+        if (user.account_name || user.accountName) {
+          sessionStorage.setItem('userAccountName', user.account_name || user.accountName)
+        }
       }
 
       setIsSubmitting(false)
@@ -152,13 +164,25 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
       const user = response.data.user
       const fullName = `${user.first_name} ${user.last_name}`.trim()
+      const firstName = (user.first_name || fullName).trim().split(/\s+/)[0] || ''
 
       // Don't store sensitive data in localStorage
       // JWT token is stored in httpOnly cookie by server
       // Store only minimal non-sensitive data in sessionStorage (cleared on tab close)
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('userRole', user.role)
-        sessionStorage.setItem('userName', fullName)
+        sessionStorage.setItem('userName', firstName)
+        sessionStorage.setItem('userFullName', fullName || firstName)
+        sessionStorage.setItem('userPhone', user.phone_number || '')
+        if (user.bank_name || user.bankName) {
+          sessionStorage.setItem('userBankName', user.bank_name || user.bankName)
+        }
+        if (user.account_number || user.accountNumber) {
+          sessionStorage.setItem('userAccountNumber', user.account_number || user.accountNumber)
+        }
+        if (user.account_name || user.accountName) {
+          sessionStorage.setItem('userAccountName', user.account_name || user.accountName)
+        }
       }
 
       setIsSubmitting(false)
@@ -268,9 +292,6 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
                 className="bg-secondary pl-10 text-foreground placeholder:text-muted-foreground"
               />
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Enter Nigerian phone number (with or without +234)
-            </p>
           </div>
 
           {mode === 'register' && (

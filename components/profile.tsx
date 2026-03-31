@@ -15,6 +15,29 @@ interface ProfileProps {
 }
 
 export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
+  const buildCachedUserData = () => {
+    if (typeof window === 'undefined') return null
+    const cachedFullName = (sessionStorage.getItem('userFullName') || '').trim()
+    const cachedFirstName = (sessionStorage.getItem('userName') || '').trim()
+    const cachedName = (cachedFullName || cachedFirstName).trim()
+    const cachedPhone = (sessionStorage.getItem('userPhone') || '').trim()
+    const cachedRole = (sessionStorage.getItem('userRole') || '').trim()
+
+    if (!cachedName && !cachedPhone && !cachedRole) return null
+
+    const nameParts = cachedName.split(/\s+/).filter(Boolean)
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ')
+
+    return {
+      name: cachedName,
+      firstName,
+      lastName,
+      phoneNumber: cachedPhone,
+      role: cachedRole,
+    }
+  }
+
   const [userData, setUserData] = useState<{ 
     id?: string
     name: string
@@ -23,7 +46,7 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
     phoneNumber: string
     email?: string
     role: string
-  } | null>(null)
+  } | null>(() => buildCachedUserData())
   const [loading, setLoading] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({
@@ -53,15 +76,32 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
       const response = await userApi.getMe()
       if (response.success && response.data?.user) {
         const user = response.data.user
+        const fullName = user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim()
+        const firstName = user.first_name || fullName.split(/\s+/)[0] || ''
+        const bankName = (user.bank_name || user.bankName || '').trim()
+        const accountNumber = (user.account_number || user.accountNumber || '').trim()
+        const accountName = (user.account_name || user.accountName || '').trim()
         setUserData({
           id: user.id,
-          name: user.name || `${user.first_name} ${user.last_name}`,
-          firstName: user.first_name,
+          name: fullName,
+          firstName,
           lastName: user.last_name,
-          phoneNumber: user.phone_number,
+          phoneNumber: user.phone_number || user.phoneNumber || '',
           email: user.email || '',
           role: user.role,
         })
+
+        if (typeof window !== 'undefined') {
+          if (fullName) sessionStorage.setItem('userFullName', fullName)
+          if (firstName) sessionStorage.setItem('userName', firstName)
+          if (user.phone_number || user.phoneNumber) {
+            sessionStorage.setItem('userPhone', user.phone_number || user.phoneNumber)
+          }
+          if (user.role) sessionStorage.setItem('userRole', user.role)
+          if (bankName) sessionStorage.setItem('userBankName', bankName)
+          if (accountNumber) sessionStorage.setItem('userAccountNumber', accountNumber)
+          if (accountName) sessionStorage.setItem('userAccountName', accountName)
+        }
       } else {
         // No fallback - user must be authenticated via API
         console.warn('User not authenticated')
@@ -75,8 +115,10 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
   }
 
   const getInitials = (name: string) => {
+    if (!name) return ''
     return name
-      .split(' ')
+      .split(/\s+/)
+      .filter(Boolean)
       .map(n => n[0])
       .join('')
       .toUpperCase()
@@ -305,11 +347,11 @@ export default function Profile({ onNavigate, onLogout, theme }: ProfileProps) {
         <div className="flex items-start gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-foreground/20">
             <span className="text-2xl font-bold">
-              {userData ? getInitials(userData.name) : 'U'}
+              {userData?.name ? getInitials(userData.name) : ''}
             </span>
           </div>
           <div className="flex-1">
-            <h2 className="text-xl font-bold">{userData?.name || 'User'}</h2>
+            <h2 className="text-xl font-bold">{userData?.name || ''}</h2>
             <p className="text-sm opacity-90 mt-1">{userData?.phoneNumber || ''}</p>
             <p className="text-xs opacity-75 mt-1 capitalize">
               {userData?.role === 'user' 

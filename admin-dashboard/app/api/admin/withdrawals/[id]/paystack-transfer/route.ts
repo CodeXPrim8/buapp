@@ -38,7 +38,7 @@ function findBankCode(bankName: string, banks: { name: string; code: string }[])
 // Send Naira to user's bank account via Paystack Transfer
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } | Promise<{ id: string }> }
 ) {
   try {
     const adminUser = await getAdminUser(request)
@@ -51,7 +51,7 @@ export async function POST(
       return errorResponse('Paystack is not configured. Set PAYSTACK_SECRET_KEY.', 500)
     }
 
-    const { id } = params
+    const { id } = await Promise.resolve(params)
 
     const { data: withdrawal, error: fetchError } = await supabase
       .from('withdrawals')
@@ -150,9 +150,13 @@ export async function POST(
     }
 
     // 4. Mark withdrawal as completed and notify user
-    const updateData = {
+    const updateData: any = {
       status: 'completed',
       completed_at: new Date().toISOString(),
+    }
+    if (!withdrawal.funds_locked) {
+      updateData.funds_locked = true
+      updateData.locked_at = withdrawal.locked_at || new Date().toISOString()
     }
 
     await supabase.from('withdrawals').update(updateData).eq('id', id)

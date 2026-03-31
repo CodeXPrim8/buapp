@@ -8,6 +8,9 @@ export interface User {
   first_name: string
   last_name: string
   email?: string
+  bank_name?: string
+  account_number?: string
+  account_name?: string
   role: UserRole
   pin_hash: string
   created_at: string

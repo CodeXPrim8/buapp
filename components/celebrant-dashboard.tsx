@@ -206,7 +206,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
               {mainBalance === null ? (
                 <BULoading size="compact" className="py-1" />
               ) : (
-                `Ƀ ${mainBalance.toLocaleString()}`
+                `Ƀ ${mainBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               )}
             </div>
             <div className="rounded-full bg-primary-foreground/20 p-2">
@@ -217,7 +217,7 @@ export default function CelebrantDashboard({ onNavigate }: CelebrantDashboardPro
             {mainBalance === null ? (
               <BULoading size="compact" className="py-1" />
             ) : (
-              `≈ ₦${mainBalance.toLocaleString()}`
+              `≈ ₦${mainBalance.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             )}
           </div>
           {totalAvailableInEvents > 0 && (

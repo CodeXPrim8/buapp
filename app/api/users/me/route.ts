@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, phone_number, first_name, last_name, email, role, created_at')
+      .select('id, phone_number, first_name, last_name, email, bank_name, account_number, account_name, role, created_at')
       .eq('id', userId)
       .maybeSingle()
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       // Try to find user by phone number as fallback
       const { data: userByPhone } = await supabase
         .from('users')
-        .select('id, phone_number, first_name, last_name, email, role, created_at')
+        .select('id, phone_number, first_name, last_name, email, bank_name, account_number, account_name, role, created_at')
         .eq('phone_number', authUser.phoneNumber)
         .maybeSingle()
       

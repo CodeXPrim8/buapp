@@ -11,7 +11,14 @@ interface DashboardProps {
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [balanceVisible, setBalanceVisible] = useState(true)
-  const [userName, setUserName] = useState<string>('User')
+  const [userName, setUserName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const cachedName = (sessionStorage.getItem('userName') || '').trim()
+      return cachedName ? cachedName.split(/\s+/)[0] : ''
+    }
+    return ''
+  })
+  const [nameLoading, setNameLoading] = useState<boolean>(true)
   const [greeting, setGreeting] = useState<string>('Good Evening')
   // Initialize balance from cache if available, otherwise null to show loading
   const [balance, setBalance] = useState<number | null>(() => {
@@ -62,8 +69,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         const userResponse = await userApi.getMe()
         if (userResponse.success && userResponse.data?.user) {
           const user = userResponse.data.user
-          const firstName = user.first_name?.trim().split(/\s+/)[0] || 'User'
+          const firstName =
+            user.first_name?.trim().split(/\s+/)[0] ||
+            user.name?.trim().split(/\s+/)[0] ||
+            ''
+          const fullName =
+            user.name?.trim() ||
+            `${user.first_name || ''} ${user.last_name || ''}`.trim()
+          const phoneNumber = user.phoneNumber || user.phone_number || ''
+          const bankName = (user.bank_name || user.bankName || '').trim()
+          const accountNumber = (user.account_number || user.accountNumber || '').trim()
+          const accountName = (user.account_name || user.accountName || '').trim()
           setUserName(firstName)
+          if (typeof window !== 'undefined') {
+            if (firstName) sessionStorage.setItem('userName', firstName)
+            if (fullName) sessionStorage.setItem('userFullName', fullName)
+            if (phoneNumber) sessionStorage.setItem('userPhone', phoneNumber)
+            if (user.role) sessionStorage.setItem('userRole', user.role)
+            if (bankName) sessionStorage.setItem('userBankName', bankName)
+            if (accountNumber) sessionStorage.setItem('userAccountNumber', accountNumber)
+            if (accountName) sessionStorage.setItem('userAccountName', accountName)
+          }
         }
 
         // Get wallet balance; after getMe() re-check: if recent purchase cache exists, prefer it (getMe() can be stale)
@@ -94,10 +120,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           const user = JSON.parse(storedUser)
           if (user.name) {
             const firstName = user.name.trim().split(/\s+/)[0]
-            setUserName(firstName || 'User')
+            setUserName(firstName || '')
           }
         }
       } finally {
+        setNameLoading(false)
         setLoading(false)
       }
     }
@@ -279,7 +306,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm opacity-90">{greeting}</p>
-            <h2 className="text-2xl font-bold">{userName}</h2>
+            <h2 className="text-2xl font-bold">
+              {userName || (nameLoading ? '...' : '')}
+            </h2>
           </div>
           <div className="flex gap-2">
             <button 
